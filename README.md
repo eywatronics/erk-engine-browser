@@ -64,6 +64,9 @@ Erk Engine is dual-licensed under either:
 
 at your option.
 
+The embedded Noto Sans font files in `crates/erk-renderer/assets/fonts` are
+licensed under the [SIL Open Font License 1.1](crates/erk-renderer/assets/fonts/OFL.txt).
+
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted

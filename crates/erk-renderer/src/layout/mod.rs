@@ -6,8 +6,11 @@
 //! erk-style. The trait implementations follow blitz-dom 0.3.0-beta.2,
 //! src/layout/mod.rs (MIT OR Apache-2.0).
 //!
-//! M0 lays out element boxes only. Text arrives in Task 5 as paragraph leaves
-//! measured by Parley; until then text contributes no size.
+//! M0 has no inline formatting context. A block whose children are only text
+//! and inline elements becomes a paragraph leaf: Parley shapes its whole text
+//! with the block's style and Taffy sees only the resulting width and height.
+//! A block that mixes block children with text keeps the blocks and drops
+//! the text; anonymous block boxes and the real inline layout come in M1.
 
 mod calc;
 
@@ -15,21 +18,24 @@ mod calc;
 mod tests;
 
 use erk_dom::{Document, NodeData, NodeId};
-use erk_style::Styles;
 use erk_style::style::Atom;
+use erk_style::style::values::specified::box_::DisplayOutside;
+use erk_style::{ComputedValues, Styles};
 use taffy::{
     AvailableSpace, BlockContext, Cache, CacheTree, Display, Layout, LayoutBlockContainer,
     LayoutFlexboxContainer, LayoutGridContainer, LayoutInput, LayoutOutput, LayoutPartialTree,
     RoundTree, Size, Style, TraversePartialTree, TraverseTree, compute_block_layout,
-    compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_root_layout,
-    round_layout,
+    compute_cached_layout, compute_flexbox_layout, compute_grid_layout, compute_leaf_layout,
+    compute_root_layout, round_layout,
 };
 
 use self::calc::CalcTable;
+use crate::text::{Paragraph, TextBrush, TextEngine};
 
 /// The result of laying out one document.
 pub(crate) struct Layouts {
     nodes: Vec<Option<Layout>>,
+    text: Vec<Option<parley::Layout<TextBrush>>>,
 }
 
 impl Layouts {
@@ -38,11 +44,23 @@ impl Layouts {
     pub(crate) fn get(&self, id: NodeId) -> Option<&Layout> {
         self.nodes.get(id.index() as usize)?.as_ref()
     }
+
+    /// The shaped, line-broken text of a paragraph leaf, positioned relative
+    /// to the leaf's content box.
+    pub(crate) fn text(&self, id: NodeId) -> Option<&parley::Layout<TextBrush>> {
+        self.text.get(id.index() as usize)?.as_ref()
+    }
 }
 
 /// Lay out `doc` in a viewport of `width` × `height` CSS pixels.
-pub(crate) fn layout(doc: &Document, styles: &Styles, width: f32, height: f32) -> Layouts {
-    let mut tree = LayoutTree::build(doc, styles);
+pub(crate) fn layout(
+    doc: &Document,
+    styles: &Styles,
+    text: &mut TextEngine,
+    width: f32,
+    height: f32,
+) -> Layouts {
+    let mut tree = LayoutTree::build(doc, styles, text);
     let root = taffy_id(doc.root());
     compute_root_layout(
         &mut tree,
@@ -53,12 +71,28 @@ pub(crate) fn layout(doc: &Document, styles: &Styles, width: f32, height: f32) -
         },
     );
     round_layout(&mut tree, root);
+
+    // Shape each paragraph once more at its final width, for painting.
+    let LayoutTree { nodes, text, .. } = tree;
+    let text_layouts = nodes
+        .iter()
+        .map(|node| {
+            let paragraph = node.paragraph.as_ref().filter(|_| node.in_tree)?;
+            let layout = &node.layout;
+            let content_width = layout.size.width
+                - layout.padding.left
+                - layout.padding.right
+                - layout.border.left
+                - layout.border.right;
+            Some(text.shape(paragraph, Some(content_width)))
+        })
+        .collect();
     Layouts {
-        nodes: tree
-            .nodes
+        nodes: nodes
             .into_iter()
             .map(|node| node.in_tree.then_some(node.layout))
             .collect(),
+        text: text_layouts,
     }
 }
 
@@ -68,18 +102,21 @@ struct LayoutNode {
     in_tree: bool,
     children: Vec<taffy::NodeId>,
     style: Style<Atom>,
+    /// Set for paragraph leaves: blocks laid out as one run of text.
+    paragraph: Option<Paragraph>,
     cache: Cache,
     unrounded: Layout,
     layout: Layout,
 }
 
-struct LayoutTree {
+struct LayoutTree<'t> {
     nodes: Vec<LayoutNode>,
     calcs: CalcTable,
+    text: &'t mut TextEngine,
 }
 
-impl LayoutTree {
-    fn build(doc: &Document, styles: &Styles) -> Self {
+impl<'t> LayoutTree<'t> {
+    fn build(doc: &Document, styles: &Styles, text: &'t mut TextEngine) -> Self {
         let mut nodes: Vec<LayoutNode> = (0..doc.capacity_hint())
             .map(|_| LayoutNode::default())
             .collect();
@@ -95,17 +132,41 @@ impl LayoutTree {
 
         let mut stack = vec![doc.root()];
         while let Some(parent) = stack.pop() {
-            let mut children = Vec::new();
+            let mut blocks = Vec::new();
+            let mut has_inline_content = false;
             for child in doc.children(parent) {
-                let is_element = matches!(
-                    doc.node(child).map(|node| &node.data),
-                    Some(NodeData::Element(_))
-                );
-                // Elements inside display:none are not styled, so a missing
-                // style means no box.
-                let Some(computed) = is_element.then(|| styles.computed(child)).flatten() else {
-                    continue;
-                };
+                match doc.node(child).map(|node| &node.data) {
+                    Some(NodeData::Text(text)) => {
+                        has_inline_content |= !text.trim_ascii().is_empty();
+                    }
+                    Some(NodeData::Element(_)) => {
+                        // Elements inside display:none are not styled, so a
+                        // missing style means no box.
+                        let Some(computed) = styles.computed(child) else {
+                            continue;
+                        };
+                        if is_inline_level(&computed) {
+                            has_inline_content = true;
+                        } else {
+                            blocks.push((child, computed));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // A paragraph leaf: only inline content, laid out as one run.
+            if blocks.is_empty() && has_inline_content && parent != doc.root() {
+                if let Some(computed) = styles.computed(parent) {
+                    let content = inline_text(doc, styles, parent);
+                    nodes[parent.index() as usize].paragraph =
+                        Some(Paragraph::new(&content, &computed));
+                }
+                continue;
+            }
+
+            let mut children = Vec::new();
+            for (child, computed) in blocks {
                 let style = stylo_taffy::to_taffy_style(&computed);
                 if style.display == Display::None {
                     continue;
@@ -120,7 +181,7 @@ impl LayoutTree {
             nodes[parent.index() as usize].children = children;
         }
 
-        Self { nodes, calcs }
+        Self { nodes, calcs, text }
     }
 
     fn node(&self, id: taffy::NodeId) -> &LayoutNode {
@@ -137,7 +198,18 @@ impl LayoutTree {
         inputs: LayoutInput,
         block_ctx: Option<&mut BlockContext<'_>>,
     ) -> LayoutOutput {
-        match self.node(id).style.display {
+        let node = &self.nodes[usize::from(id)];
+        if let Some(paragraph) = &node.paragraph {
+            let text = &mut *self.text;
+            let calcs = &self.calcs;
+            return compute_leaf_layout(
+                inputs,
+                &node.style,
+                |ptr, basis| calcs.resolve(ptr, basis),
+                |known, available| text.measure(paragraph, known, available),
+            );
+        }
+        match node.style.display {
             Display::Block => compute_block_layout(self, id, inputs, block_ctx),
             // A flow root establishes a new block formatting context: floats
             // and margins do not cross it.
@@ -149,12 +221,35 @@ impl LayoutTree {
     }
 }
 
+fn is_inline_level(style: &ComputedValues) -> bool {
+    style.get_box().clone_display().outside() == DisplayOutside::Inline
+}
+
+/// The text of `id`'s children, descending into inline elements, in tree
+/// order.
+fn inline_text(doc: &Document, styles: &Styles, id: NodeId) -> String {
+    let mut text = String::new();
+    for child in doc.children(id) {
+        match doc.node(child).map(|node| &node.data) {
+            Some(NodeData::Text(content)) => text.push_str(content),
+            Some(NodeData::Element(_)) if styles.computed(child).is_some() => {
+                text.push_str(&inline_text(doc, styles, child));
+            }
+            _ => {}
+        }
+    }
+    text
+}
+
 fn taffy_id(id: NodeId) -> taffy::NodeId {
     taffy::NodeId::from(id.index() as usize)
 }
 
-impl TraversePartialTree for LayoutTree {
-    type ChildIter<'a> = std::iter::Copied<std::slice::Iter<'a, taffy::NodeId>>;
+impl TraversePartialTree for LayoutTree<'_> {
+    type ChildIter<'a>
+        = std::iter::Copied<std::slice::Iter<'a, taffy::NodeId>>
+    where
+        Self: 'a;
 
     fn child_ids(&self, parent: taffy::NodeId) -> Self::ChildIter<'_> {
         self.node(parent).children.iter().copied()
@@ -169,10 +264,13 @@ impl TraversePartialTree for LayoutTree {
     }
 }
 
-impl TraverseTree for LayoutTree {}
+impl TraverseTree for LayoutTree<'_> {}
 
-impl LayoutPartialTree for LayoutTree {
-    type CoreContainerStyle<'a> = &'a Style<Atom>;
+impl LayoutPartialTree for LayoutTree<'_> {
+    type CoreContainerStyle<'a>
+        = &'a Style<Atom>
+    where
+        Self: 'a;
     type CustomIdent = Atom;
 
     fn get_core_container_style(&self, id: taffy::NodeId) -> &Style<Atom> {
@@ -194,7 +292,7 @@ impl LayoutPartialTree for LayoutTree {
     }
 }
 
-impl CacheTree for LayoutTree {
+impl CacheTree for LayoutTree<'_> {
     fn cache_get(&mut self, id: taffy::NodeId, inputs: &LayoutInput) -> Option<LayoutOutput> {
         self.node_mut(id).cache.get(inputs)
     }
@@ -208,9 +306,15 @@ impl CacheTree for LayoutTree {
     }
 }
 
-impl LayoutBlockContainer for LayoutTree {
-    type BlockContainerStyle<'a> = &'a Style<Atom>;
-    type BlockItemStyle<'a> = &'a Style<Atom>;
+impl LayoutBlockContainer for LayoutTree<'_> {
+    type BlockContainerStyle<'a>
+        = &'a Style<Atom>
+    where
+        Self: 'a;
+    type BlockItemStyle<'a>
+        = &'a Style<Atom>
+    where
+        Self: 'a;
 
     fn get_block_container_style(&self, id: taffy::NodeId) -> &Style<Atom> {
         &self.node(id).style
@@ -232,9 +336,15 @@ impl LayoutBlockContainer for LayoutTree {
     }
 }
 
-impl LayoutFlexboxContainer for LayoutTree {
-    type FlexboxContainerStyle<'a> = &'a Style<Atom>;
-    type FlexboxItemStyle<'a> = &'a Style<Atom>;
+impl LayoutFlexboxContainer for LayoutTree<'_> {
+    type FlexboxContainerStyle<'a>
+        = &'a Style<Atom>
+    where
+        Self: 'a;
+    type FlexboxItemStyle<'a>
+        = &'a Style<Atom>
+    where
+        Self: 'a;
 
     fn get_flexbox_container_style(&self, id: taffy::NodeId) -> &Style<Atom> {
         &self.node(id).style
@@ -245,9 +355,15 @@ impl LayoutFlexboxContainer for LayoutTree {
     }
 }
 
-impl LayoutGridContainer for LayoutTree {
-    type GridContainerStyle<'a> = &'a Style<Atom>;
-    type GridItemStyle<'a> = &'a Style<Atom>;
+impl LayoutGridContainer for LayoutTree<'_> {
+    type GridContainerStyle<'a>
+        = &'a Style<Atom>
+    where
+        Self: 'a;
+    type GridItemStyle<'a>
+        = &'a Style<Atom>
+    where
+        Self: 'a;
 
     fn get_grid_container_style(&self, id: taffy::NodeId) -> &Style<Atom> {
         &self.node(id).style
@@ -258,7 +374,7 @@ impl LayoutGridContainer for LayoutTree {
     }
 }
 
-impl RoundTree for LayoutTree {
+impl RoundTree for LayoutTree<'_> {
     fn get_unrounded_layout(&self, id: taffy::NodeId) -> Layout {
         self.node(id).unrounded
     }

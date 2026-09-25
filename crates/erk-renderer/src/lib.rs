@@ -4,3 +4,5 @@
 // messages, Task 7) exists; the shell must not see DOM types.
 #[allow(dead_code)]
 mod layout;
+#[allow(dead_code)]
+mod text;

@@ -248,6 +248,10 @@ kırılmasını, `text-align: justify`'ı, `vertical-align`'ı ve satır içi
 görselleri bilmez. Bunu Erk yazar. Referanslar: Servo'nun `layout` crate'i
 (eski adı layout_2020) ve Blitz'in `layout/inline.rs`'i.
 
+- **Metin M0'da gömülü Noto Sans ile çizilir** (Regular + Bold, OFL-1.1),
+  sistem yazı tipleri yüklenmez: ölçüm ve çizim her makinede aynıdır. Stylo'nun
+  `ex`/`ch` gibi birimleri için yazı tipi ölçümlerini `erk-style` bilmez;
+  `erk-renderer` aynı gömülü fonttan okuyan bir sağlayıcıyı dışarıdan verir.
 - **M0'da** tam IFC yok: bir paragraf Taffy'de ölçüm fonksiyonlu bir yapraktır.
   Parley paragrafı şekillendirip satırlara böler, Taffy'ye yalnızca
   `(genişlik, yükseklik)` döner; aynı Parley layout'u boyamada tekrar

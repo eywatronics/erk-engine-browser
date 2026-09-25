@@ -3,6 +3,7 @@ use erk_style::StyleEngine;
 use taffy::Layout;
 
 use super::{Layouts, layout};
+use crate::text::TextEngine;
 
 const WIDTH: f32 = 800.0;
 const HEIGHT: f32 = 600.0;
@@ -12,8 +13,13 @@ const HEIGHT: f32 = 600.0;
 fn lay_out(body: &str) -> (Document, Layouts) {
     let html = format!("<style>body {{ margin: 0 }}</style><body>{body}</body>");
     let doc = Document::parse_html(&html);
-    let styles = StyleEngine::new(WIDTH, HEIGHT).style(&doc);
-    let layouts = layout(&doc, &styles, WIDTH, HEIGHT);
+    let styles = StyleEngine::with_font_metrics(
+        WIDTH,
+        HEIGHT,
+        std::sync::Arc::new(crate::text::EmbeddedFontMetrics),
+    )
+    .style(&doc);
+    let layouts = layout(&doc, &styles, &mut TextEngine::new(), WIDTH, HEIGHT);
     (doc, layouts)
 }
 
@@ -113,4 +119,89 @@ fn padding_and_border_widen_the_border_box() {
     assert_eq!(div.size.width, 100.0 + 2.0 * 5.0 + 2.0 * 2.0);
     assert_eq!(div.padding.left, 5.0);
     assert_eq!(div.border.left, 2.0);
+}
+
+fn boxes(doc: &Document, layouts: &Layouts, tag: &LocalName) -> Vec<Layout> {
+    all(doc, tag)
+        .into_iter()
+        .map(|id| *layouts.get(id).expect("element has a box"))
+        .collect()
+}
+
+/// Height of one line of 16px Noto Sans with `line-height: normal`.
+fn one_line() -> f32 {
+    let (doc, layouts) = lay_out("<p>x</p>");
+    boxes(&doc, &layouts, &local_name!("p"))[0].size.height
+}
+
+#[test]
+fn a_paragraph_is_one_line_high() {
+    // Noto Sans: (ascender 1069 + descender 293) / 1000 × 16px ≈ 21.8px.
+    let line = one_line();
+    assert!((21.0..23.0).contains(&line), "line height was {line}");
+}
+
+#[test]
+fn a_narrow_container_wraps_the_paragraph() {
+    let (doc, layouts) = lay_out(
+        r#"<div style="width: 120px"><p>Erk sayfayı önce çizer, sonra izole eder,
+        en son betik çalıştırır.</p></div>"#,
+    );
+    let p = boxes(&doc, &layouts, &local_name!("p"))[0];
+    let lines = (p.size.height / one_line()).round();
+    assert!(lines >= 3.0, "expected at least 3 lines, got {lines}");
+    assert_eq!(p.size.width, 120.0);
+}
+
+#[test]
+fn paragraphs_stack_with_collapsed_margins() {
+    // Both paragraphs have 1em (16px) vertical margins from the UA sheet; the
+    // gap between them collapses to 16px.
+    let (doc, layouts) = lay_out("<p>bir</p><p>iki</p>");
+    let [first, second] = boxes(&doc, &layouts, &local_name!("p"))[..] else {
+        panic!("expected two paragraphs");
+    };
+    assert_eq!(
+        second.location.y,
+        first.location.y + first.size.height + 16.0
+    );
+}
+
+#[test]
+fn inline_elements_contribute_their_text() {
+    let (doc, layouts) = lay_out("<p>Merhaba <b>dünya</b></p>");
+    let p = all(&doc, &local_name!("p"))[0];
+    let text = layouts.text(p).expect("paragraph has shaped text");
+    assert_eq!(text.len(), 1);
+    assert!(
+        text.width() > 50.0,
+        "both words should be shaped, width {}",
+        text.width()
+    );
+    assert!(
+        layouts.get(all(&doc, &local_name!("b"))[0]).is_none(),
+        "inline boxes are not in the tree yet"
+    );
+}
+
+#[test]
+fn headings_are_larger_than_paragraphs() {
+    let (doc, layouts) = lay_out("<h1>Başlık</h1>");
+    let h1 = boxes(&doc, &layouts, &local_name!("h1"))[0];
+    // 2em = 32px font size: a line about twice as tall as body text.
+    assert!(h1.size.height > 1.8 * one_line());
+}
+
+#[test]
+fn ex_and_ch_come_from_the_embedded_font() {
+    // Noto Sans: x-height 536 and '0' advance 572 font units per 1000, so at
+    // 16px 10ex = 85.8px and 10ch = 91.5px. The fixed fallback would give 80.
+    let (doc, layouts) = lay_out(
+        r#"<div style="width: 10ex; height: 1px"></div><div style="width: 10ch; height: 1px"></div>"#,
+    );
+    let [ex, ch] = divs(&doc, &layouts)[..] else {
+        panic!("expected two divs");
+    };
+    assert_eq!(ex.size.width, 86.0);
+    assert_eq!(ch.size.width, 92.0);
 }

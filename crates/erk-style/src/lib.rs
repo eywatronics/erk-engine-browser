@@ -9,13 +9,14 @@
 mod node;
 mod side;
 
+use std::sync::Arc as StdArc;
+
 use app_units::Au;
 use erk_dom::{Document, NodeData, NodeId, local_name, ns};
 use euclid::{Scale, Size2D};
 use selectors::Element as _;
 use style::context::{QuirksMode, SharedStyleContext};
 use style::device::Device;
-use style::device::servo::FontMetricsProvider;
 use style::dom::TDocument;
 use style::font_metrics::FontMetrics;
 use style::global_style_data::GLOBAL_STYLE_DATA;
@@ -35,6 +36,8 @@ use style::values::computed::font::{GenericFontFamily, QueryFontMetricsFlags};
 use style::values::computed::{CSSPixelLength, Length};
 
 pub use style;
+pub use style::device::servo::FontMetricsProvider;
+pub use style::font_metrics::FontMetrics as StyleFontMetrics;
 pub use style::properties::ComputedValues;
 
 use crate::node::{ErkNode, NoPainters, RecalcStyle};
@@ -48,11 +51,26 @@ pub struct StyleEngine {
     guard: SharedRwLock,
     url: UrlExtraData,
     user_agent: DocumentStyleSheet,
+    font_metrics: StdArc<dyn FontMetricsProvider + Send>,
 }
 
 impl StyleEngine {
     /// `width` and `height` are the viewport size in CSS pixels.
+    ///
+    /// Font-relative units (`ex`, `ch`, `cap`, `ic`) use fixed fractions of
+    /// the font size; use [`StyleEngine::with_font_metrics`] to measure them
+    /// from real fonts.
     pub fn new(width: f32, height: f32) -> Self {
+        Self::with_font_metrics(width, height, StdArc::new(FixedFontMetrics))
+    }
+
+    /// Like [`StyleEngine::new`], with font metrics answered by `font_metrics`.
+    /// This crate does not load fonts; the renderer, which does, supplies them.
+    pub fn with_font_metrics(
+        width: f32,
+        height: f32,
+        font_metrics: StdArc<dyn FontMetricsProvider + Send>,
+    ) -> Self {
         let guard = SharedRwLock::new();
         let url = UrlExtraData::from(url::Url::parse("about:blank").expect("valid URL"));
         let user_agent = stylesheet(UA_CSS, Origin::UserAgent, &guard, &url);
@@ -61,6 +79,7 @@ impl StyleEngine {
             guard,
             url,
             user_agent,
+            font_metrics,
         }
     }
 
@@ -128,7 +147,7 @@ impl StyleEngine {
             self.viewport,
             Size2D::new(self.viewport.width, self.viewport.height),
             Scale::new(1.0),
-            Box::new(FixedFontMetrics),
+            Box::new(SharedFontMetrics(self.font_metrics.clone())),
             ComputedValues::initial_values_with_font_override(Font::initial_values()),
             PrefersColorScheme::Light,
             PointerCapabilities::default(),
@@ -197,9 +216,30 @@ fn stylesheet(
     )))
 }
 
-/// Font metrics as fixed fractions of the font size, until Parley arrives
-/// (M0 Task 5) and real font data can answer. They only affect font-relative
-/// units such as `ex` and `ch`.
+/// Stylo's `Device` wants to own its provider, but one engine styles many
+/// documents; this lets every `Device` share the engine's provider.
+#[derive(Debug)]
+struct SharedFontMetrics(StdArc<dyn FontMetricsProvider + Send>);
+
+impl FontMetricsProvider for SharedFontMetrics {
+    fn query_font_metrics(
+        &self,
+        vertical: bool,
+        font: &Font,
+        font_size: CSSPixelLength,
+        flags: QueryFontMetricsFlags,
+    ) -> FontMetrics {
+        self.0.query_font_metrics(vertical, font, font_size, flags)
+    }
+
+    fn base_size_for_generic(&self, generic: GenericFontFamily) -> Length {
+        self.0.base_size_for_generic(generic)
+    }
+}
+
+/// Font metrics as fixed fractions of the font size, for when no fonts are
+/// loaded (this crate's own tests). They only affect font-relative units
+/// such as `ex` and `ch`.
 #[derive(Debug)]
 struct FixedFontMetrics;
 

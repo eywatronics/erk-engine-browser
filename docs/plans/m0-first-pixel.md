@@ -460,23 +460,23 @@ stiller M1'de.
 **Files:**
 - Create: `crates/erk-renderer/src/layout/text.rs`, `assets/fonts/`
 
-- [ ] **Step 1: Gömülü yazı tipi.** Türkçe glifleri içeren OFL lisanslı bir yazı
+- [x] **Step 1: Gömülü yazı tipi.** Türkçe glifleri içeren OFL lisanslı bir yazı
   tipi (ör. Noto Sans Regular) `assets/fonts/` altına, lisans dosyasıyla birlikte
   eklenir. Dosyanın indirilmesi için kullanıcıdan onay alınır. Altın testler
   yalnızca bu yazı tipini kullanır.
-- [ ] **Step 2:** Çocukları yalnızca metin olan blok (M0'da inline öğeler
+- [x] **Step 2:** Çocukları yalnızca metin olan blok (M0'da inline öğeler
   metinleri ebeveynin stiliyle birleştirilir), Taffy'de **ölçüm fonksiyonlu bir
   yapraktır**. Ölçüm fonksiyonu Parley ile metni ebeveynin hesaplanmış yazı
   tipi, boyutu ve satır yüksekliğiyle şekillendirir, verilen genişlikte satırlara
   böler ve `(genişlik, yükseklik)` döner.
-- [ ] **Step 3:** Parley layout'u `NodeId` ile önbelleğe alınır; boyama aynı
+- [x] **Step 3:** Parley layout'u `NodeId` ile önbelleğe alınır; boyama aynı
   layout'u kullanır, yeniden şekillendirmez.
-- [ ] **Step 4: Testler:**
+- [x] **Step 4: Testler:**
   - uzun paragraf dar genişlikte birden fazla satıra bölünüyor, yüksekliği satır
     sayısıyla orantılı
   - `İstanbul` şekillendiriliyor ve her karakter için bir glif var (gömülü yazı
     tipinde eksik glif yok)
-- [ ] **Step 5:** Commit: `feat(layout): shape paragraphs with Parley as Taffy
+- [x] **Step 5:** Commit: `feat(layout): shape paragraphs with Parley as Taffy
   leaves`.
 
 ---
@@ -700,3 +700,30 @@ padding ve border'ın border-box'ı genişletmesi.
 
 Bu görev yeni bir mimari kural getirmedi. `erk-renderer`'ın işaretçi
 izlememesini `forbid(unsafe_code)` zaten zorluyor.
+
+### Task 5 tamamlandı (2026-09-25)
+
+Yazı tipleri kullanıcının onayıyla Noto'nun resmi deposundan indirildi
+(`notofonts/notofonts.github.io`, hinted TTF): `NotoSans-Regular.ttf`
+621 572 bayt, `NotoSans-Bold.ttf` 631 484 bayt, lisans
+`notofonts/latin-greek-cyrillic` deposundan `OFL.txt`. `erk-renderer`'ın
+lisans ifadesi bu yüzden `(MIT OR Apache-2.0) AND OFL-1.1`.
+
+| Plan ne diyordu | Gerçek |
+|---|---|
+| Tek yazı tipi | **Regular ve Bold.** Yalnızca Regular olsaydı fontique kalınlığı sentezlerdi; sentetik kalınlık glif genişliklerini değiştirmiyor. Test: Bold dosyası kayıttan çıkarılınca "Bold, Regular'dan geniş" testi kırılıyor. |
+| Çocukları yalnızca metin olan blok bir yaprak | Kapsam biraz genişledi: çocukları **metin ve satır içi elemanlar** olan blok bir paragraf yaprağı; `<b>` gibi elemanların metni paragrafa katılıyor (stilleri değil — tüm paragraf bloğun stiliyle şekilleniyor). Blok çocuklarla karışık metin bırakılıyor; anonim blok kutuları M1'de. |
+| Yazı tipi ölçümleri Task 5'te Parley'e bağlanacak | Parley'e değil **skrifa'ya** (Parley'in kullandığı sürüm, 0.44.0). `erk-style` yazı tipi bilmiyor; `StyleEngine::with_font_metrics` ile sağlayıcıyı dışarıdan alıyor, `erk-renderer` gömülü Noto Sans'tan okuyan `EmbeddedFontMetrics`'i veriyor. Sabit oranlı sağlayıcı yalnızca `erk-style`'ın kendi testlerinde. Test: `10ex` = 86px, `10ch` = 92px (sabit oranlarla 80 olurdu). |
+| — | Sistem yazı tipleri kapalı (`parley` `default-features = false`): ölçüm ve çizim her makinede aynı. CSS `font-family` henüz okunmuyor, her şey Noto Sans. |
+| — | `line-height: normal` → Parley `MetricsRelative(1.0)`: yazı tipinin kendi satır aralığı. 16px Noto Sans'ta bir satır ~21.8px. |
+| — | Beyaz boşluk `white-space: normal` gibi çöküyor ve kenarlardan kırpılıyor; `pre` ve diğer kipler M1'de. |
+| — | Son layout'tan sonra her paragraf kesin içerik genişliğinde bir kez daha şekilleniyor ve boyama için `Layouts::text` ile saklanıyor. |
+| — | `LayoutTree` artık bir `&mut TextEngine` tutuyor; Taffy'nin GAT'leri bu yüzden uygulamada da `where Self: 'a` istiyor. |
+
+Testler: `text.rs` içinde 5 (beyaz boşluk, Türkçe harflerin hepsinin glifi
+var, dar genişlikte satır kırma, Bold yüzü, min-content = en uzun kelime),
+layout testlerine 6 (paragrafın bir satır yüksekliği, dar kapsayıcıda
+kırılma, paragraflar arasında çöken margin, satır içi elemanların metni,
+başlığın büyüklüğü, gömülü fonttan `ex`/`ch`).
+
+**Testin kendisi de sınandı:** Bold kayıttan çıkarılınca Bold testi kırmızı.
