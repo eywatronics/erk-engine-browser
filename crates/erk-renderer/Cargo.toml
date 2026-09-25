@@ -26,6 +26,12 @@ stylo_taffy = { version = "=0.3.0-beta.2", default-features = false, features = 
 # `calc` is required by stylo_taffy, which hands calc() values to Taffy as
 # pointers. Erk never dereferences them; see layout/calc.rs.
 taffy = { version = "=0.14.0", default-features = false, features = ["std", "block_layout", "flexbox", "grid", "float_layout", "calc", "content_size"] }
+# CPU rasterizer: the reference renderer and the source of golden images.
+# Single-threaded (no `multithreading` feature) so output is deterministic.
+vello_cpu = "=0.2.0"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+png = "0.18"

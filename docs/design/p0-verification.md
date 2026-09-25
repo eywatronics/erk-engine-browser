@@ -26,7 +26,7 @@ yazıldığında doldurulur.
 | `erk-style`'ın `unsafe` yüzeyi tam beş imza | CI `guards`: `allow(unsafe_code)` sayısı 5, `unsafe {` sayısı 0 | Altıncı bir `#[allow(unsafe_code)]` | M0 T3 | 2026-09-25, yakaladı |
 | Stylo tutamağı tek işaretçi genişliğinde | `const _: () = assert!(size_of::<ErkNode>() == size_of::<usize>())` (derleme zamanı) | — (16 baytlık ilk tutamak Stylo'nun çalışma zamanı `assert`'ünde düştü; bu kontrol onu derlemeye taşıdı) | M0 T3 | — |
 | Kabuk DOM'a dokunamaz | CI: `cargo tree -p erk-shell -e normal --depth 1` çıktısında `erk-dom` yok. `--depth 1` bilerek: `erk-shell → erk-renderer → erk-dom` zinciri dolaylı olarak her zaman görünür | `erk-shell`'e `erk-dom` bağımlılığı eklemek | M0 T7 | — |
-| Render çıktısı değişmez | Altın PNG testi (`cargo test`) | Varsayılan yazı rengini değiştirmek | M0 T6 | — |
+| Render çıktısı değişmez | Altın PNG testi (`cargo test`), çözülmüş piksellerle | Glif hinting'ini kapatmak | M0 T6 | 2026-09-25, yakaladı |
 | Lisans izin listesi | `cargo deny check licenses` | GPL lisanslı bir geliştirme bağımlılığı | M1 | — |
 | WPT gerilemesi yok | wptrunner "erk" ürünü + beklenti dosyaları; taban çizgisinin altı PR'ı kırar | Geçen bir reftest'i bozan değişiklik | M1 | — |
 | Renderer ağa bağımlı değil | CI: `cargo tree -p erk-renderer` çıktısında `erk-network`, `reqwest`, `hyper`, `tokio` yok | `erk-renderer`'a `reqwest` eklemek | M2 | — |

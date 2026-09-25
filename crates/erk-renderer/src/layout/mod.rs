@@ -35,7 +35,13 @@ use crate::text::{Paragraph, TextBrush, TextEngine};
 /// The result of laying out one document.
 pub(crate) struct Layouts {
     nodes: Vec<Option<Layout>>,
-    text: Vec<Option<parley::Layout<TextBrush>>>,
+    text: Vec<Option<ShapedText>>,
+}
+
+/// A paragraph's text and its shaped, line-broken layout.
+pub(crate) struct ShapedText {
+    pub(crate) text: String,
+    pub(crate) layout: parley::Layout<TextBrush>,
 }
 
 impl Layouts {
@@ -47,7 +53,7 @@ impl Layouts {
 
     /// The shaped, line-broken text of a paragraph leaf, positioned relative
     /// to the leaf's content box.
-    pub(crate) fn text(&self, id: NodeId) -> Option<&parley::Layout<TextBrush>> {
+    pub(crate) fn text(&self, id: NodeId) -> Option<&ShapedText> {
         self.text.get(id.index() as usize)?.as_ref()
     }
 }
@@ -84,7 +90,10 @@ pub(crate) fn layout(
                 - layout.padding.right
                 - layout.border.left
                 - layout.border.right;
-            Some(text.shape(paragraph, Some(content_width)))
+            Some(ShapedText {
+                text: paragraph.text.clone(),
+                layout: text.shape(paragraph, Some(content_width)),
+            })
         })
         .collect();
     Layouts {

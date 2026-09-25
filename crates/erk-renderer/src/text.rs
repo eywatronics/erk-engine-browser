@@ -11,6 +11,8 @@ use erk_style::style::values::computed::font::LineHeight as CssLineHeight;
 use erk_style::style::values::computed::font::{GenericFontFamily, QueryFontMetricsFlags};
 use erk_style::style::values::computed::{CSSPixelLength, Length};
 use erk_style::{ComputedValues, FontMetricsProvider, StyleFontMetrics};
+
+use crate::color::srgb_bytes;
 use parley::fontique::{Blob, Collection, CollectionOptions, SourceCache};
 use parley::{
     Alignment, AlignmentOptions, FontContext, FontWeight, Layout, LayoutContext, LineHeight,
@@ -52,7 +54,7 @@ impl Paragraph {
             font_size,
             line_height,
             weight: style.clone_font_weight().value(),
-            color: TextBrush(srgb_bytes(style)),
+            color: TextBrush(srgb_bytes(style.clone_color())),
         }
     }
 }
@@ -63,18 +65,6 @@ fn collapse_whitespace(text: &str) -> String {
         .filter(|word| !word.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-fn srgb_bytes(style: &ComputedValues) -> [u8; 4] {
-    use erk_style::style::color::ColorSpace;
-    let color = style.clone_color().to_color_space(ColorSpace::Srgb);
-    let byte = |channel: f32| (channel.clamp(0.0, 1.0) * 255.0).round() as u8;
-    [
-        byte(color.components.0),
-        byte(color.components.1),
-        byte(color.components.2),
-        byte(color.alpha),
-    ]
 }
 
 /// Answers Stylo's font metric queries (for `ex`, `ch`, `cap`) from the

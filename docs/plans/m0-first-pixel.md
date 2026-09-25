@@ -487,21 +487,21 @@ stiller M1'de.
 - Create: `crates/erk-renderer/src/display.rs`, `src/paint.rs`,
   `tests/golden.rs`, `tests/golden/merhaba.png`
 
-- [ ] **Step 1:** `DisplayItem`: `Rect { rect, color }` (arka plan) ve
+- [x] **Step 1:** `DisplayItem`: `Rect { rect, color }` (arka plan) ve
   `GlyphRun { font, size, color, glyphs }`. Layout ağacı gezilerek kurulur:
   önce arka planlar, sonra metin. Display list metin olarak da dökülebilir
   (hata ayıklama ve ileride reftest için).
-- [ ] **Step 2:** `vello_cpu` 0.2'nin API'si docs.rs'ten okunur (render bağlamı,
+- [x] **Step 2:** `vello_cpu` 0.2'nin API'si docs.rs'ten okunur (render bağlamı,
   paint ayarı, dikdörtgen doldurma, glif çizme, pixmap'e boyama). Display list
   sırayla boyanır; tek iş parçacığı.
-- [ ] **Step 3:** PNG'ye yazma (`png` crate'i).
-- [ ] **Step 4: Altın test.** `tests/golden.rs` `examples/merhaba.html`'i
+- [x] **Step 3:** PNG'ye yazma (`png` crate'i).
+- [x] **Step 4: Altın test.** `tests/golden.rs` `examples/merhaba.html`'i
   800×600'de boyar ve `tests/golden/merhaba.png` ile piksel piksel karşılaştırır.
   Uyuşmazlıkta gerçek çıktı `target/golden-actual/` altına yazılır ki fark
   incelenebilsin. İlk referans elle incelenip commit'lenir.
-- [ ] **Step 5: Kasıtlı ihlal:** Varsayılan metin rengini değiştir → test kırmızı.
+- [x] **Step 5: Kasıtlı ihlal:** Varsayılan metin rengini değiştir → test kırmızı.
   Geri al.
-- [ ] **Step 6:** Commit: `feat(paint): display list painted with vello_cpu`.
+- [x] **Step 6:** Commit: `feat(paint): display list painted with vello_cpu`.
 
 ---
 
@@ -727,3 +727,25 @@ kırılma, paragraflar arasında çöken margin, satır içi elemanların metni,
 başlığın büyüklüğü, gömülü fonttan `ex`/`ch`).
 
 **Testin kendisi de sınandı:** Bold kayıttan çıkarılınca Bold testi kırmızı.
+
+### Task 6 tamamlandı (2026-09-25)
+
+İlk pikseller: `examples/merhaba.html` (Task 8'in kabul sayfası, burada
+oluşturuldu) 800×600'de doğru çiziliyor. Altın görüntü elle incelendi:
+kalın kırmızı başlık, iki satıra kırılan paragraf, 16px iç boşluklu beyaz
+kutu, eksiksiz Türkçe karakterler, body arka planının tuvale yayılması.
+
+| Plan ne diyordu | Gerçek |
+|---|---|
+| `vello_cpu` tek iş parçacığında | Tek iş parçacığı yetmiyor: `vello_cpu` çalıştığı işlemcinin SIMD seviyesini (SSE/AVX2/NEON) kendisi seçiyor ve seviyeler farklı yuvarlayabiliyor. Boyama **`Level::baseline()`** ile sabit; altın görüntüler Windows ve Linux CI'da aynı çıkmalı. Bedeli hız; hız M2'deki GPU yolunun işi. |
+| Display list: arka planlar ve glif çalışmaları | Aynen. Ayrıca **tuval arka planı** (CSS 2 §14.2): kök elemanın, o yoksa body'nin arka planı tüm tuvali boyar ve kendisi ikinci kez boyanmaz. Kenarlıklar henüz yok. |
+| Display list metin olarak dökülebilir | `DisplayList::dump`: satır başına bir öğe (`rect x y wxh #rrggbbaa`, `glyphs x y 16px #... "metin"`). Altın test kırıldığında gerçek PNG ile birlikte `target/golden-actual/` altına yazılıyor; "ne kaydı" sorusu görüntüye bakmadan cevaplanıyor. |
+| — | `erk-renderer`'ın genel yüzeyi: `render_html(html, genişlik, yükseklik) -> Frame` (`rgba`, `to_png`, `display_list`). HTML metni girer, piksel çıkar; DOM, stil ve layout tipleri crate içinde kalır. |
+| — | Altın görüntü yalnızca `ERK_BLESS=1` ile yeniden yazılır. Karşılaştırma PNG baytlarıyla değil çözülmüş piksellerle; kodlayıcı sürümü değişse de test kırılmaz. |
+| — | Paragraf metni artık `Layouts` içinde şekillenmiş layout'la birlikte (`ShapedText`) duruyor; dökümde glif çalışmasının kaynak metni gösteriliyor. |
+
+Testler: `tests/golden.rs` (altın görüntü, iki çizimin bayt bayt aynı olması).
+
+Kasıtlı ihlal: glif hinting'i kapatıldı (`.hint(false)`) → altın test
+kırmızı, gerçek çıktı ve döküm `target/golden-actual/` altında. Geri alınınca
+yeşil.

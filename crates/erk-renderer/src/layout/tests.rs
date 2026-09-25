@@ -171,7 +171,7 @@ fn paragraphs_stack_with_collapsed_margins() {
 fn inline_elements_contribute_their_text() {
     let (doc, layouts) = lay_out("<p>Merhaba <b>dünya</b></p>");
     let p = all(&doc, &local_name!("p"))[0];
-    let text = layouts.text(p).expect("paragraph has shaped text");
+    let text = &layouts.text(p).expect("paragraph has shaped text").layout;
     assert_eq!(text.len(), 1);
     assert!(
         text.width() > 50.0,
