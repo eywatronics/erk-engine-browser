@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a crash, rendering error, or other incorrect behavior.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected to happen instead.
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: Page or test case
+      description: The URL or a minimal HTML/CSS snippet that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Build with `cargo build`
+        2. Open ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. Windows 11, Ubuntu 24.04, macOS 15
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Erk version / commit
+      placeholder: e.g. 0.1.0 or commit hash
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant log output or backtrace (run with `RUST_BACKTRACE=1`).
+      render: text

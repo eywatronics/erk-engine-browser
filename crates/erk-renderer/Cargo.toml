@@ -1,0 +1,10 @@
+[package]
+name = "erk-renderer"
+description = "Erk Engine renderer: HTML/CSS rendering in a sandboxed process."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

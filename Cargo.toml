@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/erk-shell",    # OS window (winit) and broker process
+    "crates/erk-renderer", # HTML/CSS rendering engine, sandboxed process
+    "crates/erk-network",  # Networking and Fetch rules
+    "crates/erk-dom",      # DOM tree management
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["ismet kabatepe", "Erk Engine Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/eywatronics/erk-engine-browser"

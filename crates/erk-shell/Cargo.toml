@@ -1,0 +1,10 @@
+[package]
+name = "erk-shell"
+description = "Erk Engine shell: OS window and broker process."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

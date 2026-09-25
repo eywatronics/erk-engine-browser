@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose support for a web platform feature or an engine capability.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Feature
+      description: What should Erk support?
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: Web standard
+      description: Link to the W3C / WHATWG / other specification this covers. Write "none" for engine or embedding features.
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Which sites, tests (e.g. WPT), or embedding use cases need this?
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Implementation notes
+      description: Optional. Affected crates, design ideas, prior art in other engines.

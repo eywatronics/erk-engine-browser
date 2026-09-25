@@ -1,0 +1,10 @@
+[package]
+name = "erk-dom"
+description = "Erk Engine DOM: document tree management."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
