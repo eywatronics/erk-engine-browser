@@ -340,8 +340,10 @@ verilir. Ölçülenler:
 ## 9. Test stratejisi
 
 - Birim testleri her crate'te.
-- Altın PNG testleri: `--screenshot` çıktısı depodaki referansla piksel piksel
-  karşılaştırılır.
+- Altın PNG testleri: `render_html` çıktısı depodaki referansla piksel piksel
+  karşılaştırılır (kabuğun `--screenshot` yolu aynı işlevi çağırır).
+- Chrome referans testi: aynı sayfalar Chrome'da ve Erk'te çizilir, sayfa
+  başına içerik skoru iki ondalıkta sabitlenir ve yalnızca gerekçeyle düşebilir.
 - WPT (M1'den itibaren): wptrunner'a `erk --screenshot` üzerinden koşan özel bir
   "erk" ürünü eklenir (Servo'nun `executorservo` yaklaşımı). Önce reftest'ler;
   testharness.js testleri JS ile (M4) gelir.

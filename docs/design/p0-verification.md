@@ -27,7 +27,8 @@ yazıldığında doldurulur.
 | Stylo tutamağı tek işaretçi genişliğinde | `const _: () = assert!(size_of::<ErkNode>() == size_of::<usize>())` (derleme zamanı) | — (16 baytlık ilk tutamak Stylo'nun çalışma zamanı `assert`'ünde düştü; bu kontrol onu derlemeye taşıdı) | M0 T3 | — |
 | Kabuk DOM'a dokunamaz | CI: `cargo tree -p erk-shell -e normal --depth 1` çıktısında `erk-dom` yok. `--depth 1` bilerek: `erk-shell → erk-renderer → erk-dom` zinciri dolaylı olarak her zaman görünür | `erk-shell`'e `erk-dom` bağımlılığı eklemek | M0 T7 | — |
 | Render çıktısı değişmez | Altın PNG testi (`cargo test`), çözülmüş piksellerle | Glif hinting'ini kapatmak | M0 T6 | 2026-09-25, yakaladı |
-| Chrome'a yakınlık gerilemez | `tests/chrome_reference.rs`: sayfa başına içerik skoru `expectations.txt`'teki değerin altına düşemez (mandal) | UA stil sayfasında body margin'i 8px → 10px (`paragraphs` %22.17 → %6.47) | M0 T6b | 2026-09-25, yakaladı |
+| Chrome'a yakınlık gerilemez | `tests/chrome_reference.rs`: sayfa başına içerik skoru `expectations.txt`'teki değere iki ondalıkta eşit olmalı, iki yönde de kırılır | UA'da body margin 8px → 10px; `blocks`'ta bir kutu 1px geniş (%99.97); `merhaba`'da beyaz kutu kaldırılınca (%10.37); sayfa `.htm` uzantısıyla | M0 T6b | 2026-09-25, yakaladı |
+| Beklenti gerekçesiz düşmez | CI `guards`: `.github/scripts/check-reference-expectations.sh`, PR tabanıyla karşılaştırır; düşen satırda `# lowered:` yoksa ya da Chrome görüntüsü dururken beklenti silinmişse hata | Yorumsuz düşürme; beklenti satırını silme | M0 T6b | 2026-09-25, yakaladı |
 | Lisans izin listesi | `cargo deny check licenses` | GPL lisanslı bir geliştirme bağımlılığı | M1 | — |
 | WPT gerilemesi yok | wptrunner "erk" ürünü + beklenti dosyaları; taban çizgisinin altı PR'ı kırar | Geçen bir reftest'i bozan değişiklik | M1 | — |
 | Renderer ağa bağımlı değil | CI: `cargo tree -p erk-renderer` çıktısında `erk-network`, `reqwest`, `hyper`, `tokio` yok | `erk-renderer`'a `reqwest` eklemek | M2 | — |
@@ -58,24 +59,30 @@ tek satırlık CI adımlarıdır.
 
 ### 3.1 Altın PNG (M0)
 
-`erk --screenshot out.png sayfa.html` başsız modda çalışır; çıktı
-`crates/erk-renderer/tests/golden/` altındaki referansla piksel piksel
-karşılaştırılır. Referans değişikliği ayrı bir commit'tir ve gövdesi neden
-değiştiğini söyler.
+`crates/erk-renderer/tests/golden.rs`, sayfayı `erk_renderer::render_html`
+ile çizer ve çözülmüş pikselleri `crates/erk-renderer/tests/golden/` altındaki
+referansla karşılaştırır. Kabuğun `--screenshot` yolu (Task 7) aynı işlevi
+çağıracak; o yolun kendi testi Task 7'de gelir. Referans görüntü, onu
+değiştiren değişiklikle **aynı commit'te** güncellenir ve gövde neden
+değiştiğini söyler; ayrı commit, değişikliği yapan commit'i kırmızı bırakırdı.
 
-Belirleyicilik için: sabit pencere boyutu, sabit DPI (1x), depoda gömülü yazı
-tipi (sistem yazı tipine bağlı test, makineden makineye değişir), `vello_cpu`
-tek iş parçacığında.
+Belirleyicilik için: sabit boyut (800×600), 1x DPI, depoda gömülü yazı tipi
+(sistem yazı tipi yüklenmez), `vello_cpu` tek iş parçacığında **ve SIMD seviyesi
+`Level::baseline()`'a sabit** (seviyeler farklı yuvarlayabiliyor).
 
 ### 3.2 Chrome referans testi (M0 T6b'den itibaren)
 
 Aynı sayfa Chrome'da ve Erk'te çizilir; Chrome görüntüleri bir kez yakalanıp
 depoya konur (`crates/erk-renderer/tests/reference/chrome/`). Skor, içerik
-piksellerinin (tuval renginden kanal başına 24'ten fazla ayrışan pikseller)
-kaçının Chrome'la kanal başına 24'e kadar farkla eşleştiği. Yalnızca tüm
-piksellere bakılsaydı metin hiç çizilmeyen bir sayfa bile %95'in üstünde
-çıkardı. Beklentiler `expectations.txt`'te ve yalnızca yükselir. Kurallar
-CLAUDE.md'de.
+piksellerinin (tuval renginden **herhangi bir** farkı olan pikseller) kaçının
+Chrome'la kanal başına 12'ye kadar farkla eşleştiği. Yalnızca tüm piksellere
+bakılsaydı metin hiç çizilmeyen bir sayfa bile %95'in üstünde çıkardı.
+
+Tolerans, referans sayfalarındaki en küçük düz renk farkının (17) altında
+kalmak zorunda: 24'te `merhaba`'daki beyaz kutunun hiç çizilmemesi (fark 21)
+fark edilmiyordu. Skor beklentiye iki ondalıkta tam eşit olmalı, test iki
+yönde de kırılır; beklenti düşürmek `# lowered:` gerekçesi ister ve bunu CI
+denetler. Kurallar proje kurallarında.
 
 WPT reftest'leri (aşağıda) bununla çakışmaz: WPT, spesifikasyonun istediğini
 iki sayfanın aynı çizilmesiyle doğrular; Chrome testi, gerçek bir tarayıcıdan

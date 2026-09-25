@@ -13,7 +13,8 @@ projeye aittir.
 
 - Commit mesajlarında, açıklamalarında veya trailer'larında **hiçbir yapay zekâ
   aracının adı geçmez.** `Co-Authored-By: Claude`, `Generated with ...` ve
-  benzeri satırlar eklenmez.
+  benzeri satırlar eklenmez. Bu dosyanın adı da commit mesajına yazılmaz;
+  "proje kuralları" denir.
 - Mesaj gövdesi *ne* yapıldığını değil, **neden** yapıldığını anlatır. Kararın
   gerekçesi ve reddedilen alternatif, koda bakılarak anlaşılamayacak tek şeydir.
 - Konu satırı 72 karakteri geçmez; gövde satırları 72 karakterde sarılır.
@@ -128,6 +129,9 @@ karşılaştırılır (`crates/erk-renderer/tests/chrome_reference.rs`). Altın 
 Erk'in kendi çıktısıyla **tam eşitliği** korur; referans testi **Chrome'a
 yakınlığı** korur. Piksel piksel aynılık hedef değil (kenar yumuşatma ve
 hinting farklı); sayfa başına bir içerik skoru var ve skor yalnızca yükselir.
+İçerik pikseli, tuval renginden **herhangi bir** farkı olan piksel; eşleşme
+toleransı kanal başına 12 ve referans sayfalarındaki en küçük düz renk farkının
+(17) altında kalmak zorunda.
 
 - **Render'ı etkileyen her önemli değişiklikten sonra çalıştırılır:** stil,
   layout, metin, boyama, UA stil sayfası, render bağımlılıklarının
@@ -139,22 +143,30 @@ hinting farklı); sayfa başına bir içerik skoru var ve skor yalnızca yüksel
 
   Skor tablosu commit gövdesine ve PR açıklamasına yazılır. Test `cargo test
   --workspace` içinde CI'da da koşar; Chrome gerektirmez.
-- **Skor beklentinin altına düşerse değişiklik birleşmez.** Düşüş bilinçliyse
-  (ör. Erk'in önceki çıktısı yanlış bir sebeple yakındı) gerekçe yazılır ve
-  beklentiyi düşürmek ayrı bir commit'tir.
-- **Skor yükselirse beklenti aynı commit'te yükseltilir**
-  (`tests/reference/expectations.txt`). Sayılar yalnızca yukarı gider.
+- **Skor, beklentiye iki ondalıkta tam eşit olmalı; test iki yönde de
+  kırılır.** Altında: gerileme, değişiklik birleşmez. Üstünde: beklenti aynı
+  commit'te yükseltilir (`tests/reference/expectations.txt`). Aksi halde bir
+  iyileşme sonradan hiçbir test fark etmeden geri verilebilirdi.
+- **Beklenti düşürmek gerekçe ister:** düşen satırın sonunda
+  `# lowered: gerekçe` yorumu olur. CI (`guards` job'ı) beklentileri PR'ın
+  tabanıyla karşılaştırır ve yorumsuz düşüşü reddeder.
 - **Her yeni render özelliği kendi referans sayfasıyla gelir** (kenarlık,
   görüntü, float, ...), muhafız ilkesiyle aynı gerekçe.
 - **Chrome görüntüleri yalnızca yeni sayfa eklenince veya Chrome
-  yükseltilince yeniden yakalanır**, ayrı bir commit'te, `VERSION.txt` ile:
+  yükseltilince yakalanır**, ayrı bir commit'te. Komut yalnızca referansı
+  olmayan sayfaları yakalar; Chrome'un sürümü `VERSION.txt`'tekinden farklıysa
+  sürüm karıştırmamak için reddeder. Chrome yükseltilince tüm sayfalar
+  `ERK_RECAPTURE_ALL=1` ile yeniden yakalanır. Sürüm `chrome.exe`'nin sürüm
+  bilgisinden okunur; Windows'ta `chrome.exe --version` açık tarayıcıya
+  devredildiği için hiç çağrılmaz.
 
   ```
   cargo test -p erk-renderer --test chrome_reference -- --ignored capture_chrome_references
   ```
 
-  Windows'ta sürüm `ERK_CHROME_VERSION` ortam değişkeninden alınır. Bir
-  referans sayfası değişirse Chrome görüntüsü de yeniden yakalanır.
+  Bir referans sayfası değişirse Chrome görüntüsü silinip yeniden yakalanır.
+- `tests/reference/pages/` altında yalnızca `.html` dosyaları durur; sayfası
+  olmayan bir beklenti ya da Chrome görüntüsü testi kırar.
 - Fark görüntüleri ve rapor `target/reference-diff/` altındadır.
 
 ## Dokümanlar

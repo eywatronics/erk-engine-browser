@@ -3,8 +3,9 @@
 //!
 //! A mismatch writes the actual image and display list to
 //! `target/golden-actual/`. To accept an intended change, rerun with
-//! `ERK_BLESS=1` and commit the new golden image in its own commit, saying
-//! why it changed.
+//! `ERK_BLESS=1` and commit the new golden image together with the change
+//! that caused it, saying in the message why the image changed. (Committing
+//! it separately would leave the causing commit red.)
 
 use std::path::{Path, PathBuf};
 

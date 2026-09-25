@@ -4,34 +4,44 @@
 //! (`tests/reference/chrome/`), so this test needs no browser and gives the
 //! same score on every machine: Erk's output is deterministic. Erk will not
 //! match Chrome pixel for pixel (antialiasing and hinting differ), so each
-//! page has a similarity score, and the score may never drop below the one
-//! recorded in `tests/reference/expectations.txt`. When it rises, the
-//! expectation is raised in the same commit: a ratchet.
+//! page has a similarity score, recorded to two decimals in
+//! `tests/reference/expectations.txt`.
 //!
-//! The score counts only content pixels (pixels that are not the canvas
-//! colour in either image); otherwise a page with no text drawn at all would
-//! still score in the nineties.
+//! The score must equal its expectation. Below it is a regression. Above it
+//! means the expectation is stale and must be raised in the same commit:
+//! otherwise an improvement could later be given back without any test
+//! noticing. Lowering an expectation is checked by CI (it needs a
+//! `# lowered: reason` comment on the line).
+//!
+//! The score counts content pixels only: pixels that differ from the canvas
+//! colour at all, in either image. Counting every pixel would score a page
+//! with no text drawn in the nineties. "At all" matters: a white box on an
+//! off-white canvas is content, even though its colour is close.
 //!
 //! Run with `-- --nocapture` for the score table. Diff images go to
 //! `target/reference-diff/`.
 //!
-//! To capture Chrome references (new page, or new Chrome version):
+//! To capture Chrome references for pages that have none yet:
 //! `cargo test -p erk-renderer --test chrome_reference -- --ignored capture_chrome_references`
+//! After a Chrome upgrade, set `ERK_RECAPTURE_ALL=1` to recapture every page.
 //! Chrome is found through `ERK_CHROME` or its default install path.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const WIDTH: u16 = 800;
 const HEIGHT: u16 = 600;
 
-/// Largest per-channel difference (0-255) at which two pixels still count
-/// as the same: absorbs antialiasing, not misplaced glyphs.
-const TOLERANCE: u8 = 24;
-
-/// How far below its expectation a score may land before the test fails.
-/// Erk is deterministic, so this only absorbs rounding in the printout.
-const SLACK: f64 = 0.05;
+/// Largest per-channel difference (0-255) at which an Erk pixel and a
+/// Chrome pixel still count as the same: absorbs slight antialiasing
+/// differences, not misplaced glyphs.
+///
+/// It must stay below the smallest difference between two flat colours on
+/// any reference page (17: the white box on blocks.html's canvas), or a
+/// missing background could pass as antialiasing. At 24 a missing white box
+/// on merhaba.html (difference 21) went unnoticed.
+const TOLERANCE: u8 = 12;
 
 fn manifest() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -41,7 +51,8 @@ fn reference_dir() -> PathBuf {
     manifest().join("tests/reference")
 }
 
-/// Every reference page: `(name, path)`.
+/// Every reference page: `(name, path)`. The pages directory may hold only
+/// `.html` files, so a misnamed page cannot silently drop out of the test.
 fn pages() -> Vec<(String, PathBuf)> {
     let mut pages = vec![(
         "merhaba".to_owned(),
@@ -50,10 +61,14 @@ fn pages() -> Vec<(String, PathBuf)> {
     let mut dir: Vec<_> = std::fs::read_dir(reference_dir().join("pages"))
         .expect("tests/reference/pages exists")
         .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "html"))
         .collect();
     dir.sort();
     for path in dir {
+        assert!(
+            path.extension().is_some_and(|ext| ext == "html"),
+            "{} is not a .html file; reference pages must end in .html",
+            path.display()
+        );
         let name = path.file_stem().unwrap().to_string_lossy().into_owned();
         pages.push((name, path));
     }
@@ -112,16 +127,22 @@ struct Comparison {
     diff: Image,
 }
 
-fn most_common_colour(image: &Image) -> [u8; 3] {
-    let mut counts = std::collections::HashMap::new();
+/// The canvas colour: the most common colour of the Chrome image. Ties are
+/// broken by the colour value, so the result does not depend on hash order.
+fn canvas_colour(image: &Image) -> [u8; 3] {
+    let mut counts: HashMap<[u8; 3], u32> = HashMap::new();
     for p in image.pixels.as_chunks::<4>().0 {
-        *counts.entry([p[0], p[1], p[2]]).or_insert(0u32) += 1;
+        *counts.entry([p[0], p[1], p[2]]).or_default() += 1;
     }
     counts
         .into_iter()
-        .max_by_key(|&(_, count)| count)
+        .max_by_key(|&(colour, count)| (count, colour))
         .map(|(colour, _)| colour)
         .unwrap_or([255, 255, 255])
+}
+
+fn channel_diff(a: &[u8], b: &[u8]) -> u8 {
+    (0..3).map(|i| a[i].abs_diff(b[i])).max().unwrap()
 }
 
 fn compare(erk: &Image, chrome: &Image) -> Comparison {
@@ -130,21 +151,19 @@ fn compare(erk: &Image, chrome: &Image) -> Comparison {
         (chrome.width, chrome.height),
         "Erk and Chrome images differ in size"
     );
-    let canvas = most_common_colour(chrome);
-    let channel_diff = |a: &[u8], b: &[u8]| (0..3).map(|i| a[i].abs_diff(b[i])).max().unwrap();
+    let canvas = canvas_colour(chrome);
 
     let (mut matched, mut content, mut content_matched) = (0u64, 0u64, 0u64);
     let mut diff = Vec::with_capacity(erk.pixels.len());
-    for (e, c) in erk
+    let pairs = erk
         .pixels
         .as_chunks::<4>()
         .0
         .iter()
-        .zip(chrome.pixels.as_chunks::<4>().0)
-    {
+        .zip(chrome.pixels.as_chunks::<4>().0);
+    for (e, c) in pairs {
         let same = channel_diff(e, c) <= TOLERANCE;
-        let is_content =
-            channel_diff(e, &canvas) > TOLERANCE || channel_diff(c, &canvas) > TOLERANCE;
+        let is_content = channel_diff(e, &canvas) > 0 || channel_diff(c, &canvas) > 0;
         matched += u64::from(same);
         if is_content {
             content += 1;
@@ -152,7 +171,8 @@ fn compare(erk: &Image, chrome: &Image) -> Comparison {
         }
         // Red where they disagree, a faint grey copy of Chrome elsewhere.
         if same {
-            let grey = 200 + (u16::from(c[0]) + u16::from(c[1]) + u16::from(c[2])) as u8 / 3 / 5;
+            let brightness = (u16::from(c[0]) + u16::from(c[1]) + u16::from(c[2])) / 3;
+            let grey = 200 + (brightness / 5) as u8;
             diff.extend_from_slice(&[grey, grey, grey, 255]);
         } else {
             diff.extend_from_slice(&[230, 30, 30, 255]);
@@ -174,12 +194,18 @@ fn compare(erk: &Image, chrome: &Image) -> Comparison {
     }
 }
 
+/// Scores are compared at the two decimals they are recorded with.
+fn hundredths(score: f64) -> i64 {
+    (score * 100.0).round() as i64
+}
+
+/// `name score` per line; `#` starts a comment, also at the end of a line.
 fn expectations() -> Vec<(String, f64)> {
     std::fs::read_to_string(reference_dir().join("expectations.txt"))
         .unwrap_or_default()
         .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| line.split('#').next().unwrap().trim())
+        .filter(|line| !line.is_empty())
         .map(|line| {
             let (name, score) = line.split_once(char::is_whitespace).expect("`name score`");
             (
@@ -191,14 +217,33 @@ fn expectations() -> Vec<(String, f64)> {
 }
 
 #[test]
-fn erk_does_not_drift_away_from_chrome() {
+fn erk_matches_its_recorded_distance_from_chrome() {
+    let pages = pages();
     let expected = expectations();
     let out = manifest().join("../../target/reference-diff");
     std::fs::create_dir_all(&out).unwrap();
+    let mut failures = Vec::new();
+
+    // Nothing may be checked by name without a page behind it: a removed or
+    // renamed page must not leave an expectation that is silently skipped.
+    let has_page = |name: &str| pages.iter().any(|(page, _)| page == name);
+    for (name, _) in &expected {
+        if !has_page(name) {
+            failures.push(format!("expectation for `{name}`, which has no page"));
+        }
+    }
+    for entry in std::fs::read_dir(reference_dir().join("chrome")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|ext| ext == "png") {
+            let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+            if !has_page(&name) {
+                failures.push(format!("Chrome reference {name}.png has no page"));
+            }
+        }
+    }
 
     let mut report = String::from("page            content  overall  expected\n");
-    let mut failures = Vec::new();
-    for (name, path) in pages() {
+    for (name, path) in &pages {
         let chrome_path = reference_dir().join("chrome").join(format!("{name}.png"));
         let Ok(chrome_png) = std::fs::read(&chrome_path) else {
             failures.push(format!(
@@ -206,7 +251,7 @@ fn erk_does_not_drift_away_from_chrome() {
             ));
             continue;
         };
-        let html = std::fs::read_to_string(&path).unwrap();
+        let html = std::fs::read_to_string(path).unwrap();
         let erk_png = erk_renderer::render_html(&html, WIDTH, HEIGHT).to_png();
         let result = compare(&decode(&erk_png), &decode(&chrome_png));
 
@@ -214,32 +259,35 @@ fn erk_does_not_drift_away_from_chrome() {
         std::fs::write(out.join(format!("{name}.chrome.png")), &chrome_png).unwrap();
         std::fs::write(out.join(format!("{name}.diff.png")), encode(&result.diff)).unwrap();
 
-        let expectation = expected.iter().find(|(n, _)| *n == name).map(|&(_, s)| s);
+        let expectation = expected.iter().find(|(n, _)| n == name).map(|&(_, s)| s);
         report.push_str(&format!(
             "{name:<15} {:>6.2}%  {:>6.2}%  {}\n",
             result.content_score,
             result.overall_score,
             expectation.map_or("-".to_owned(), |s| format!("{s:.2}%"))
         ));
-        match expectation {
+        let score = hundredths(result.content_score);
+        match expectation.map(hundredths) {
             None => failures.push(format!(
                 "{name}: no expectation; add `{name} {:.2}` to expectations.txt",
                 result.content_score
             )),
-            Some(s) if result.content_score < s - SLACK => failures.push(format!(
-                "{name}: content score {:.2}% fell below the expected {s:.2}%",
-                result.content_score
+            Some(expected) if score < expected => failures.push(format!(
+                "{name}: content score {:.2}% fell below the expected {:.2}%",
+                result.content_score,
+                expected as f64 / 100.0
             )),
-            Some(s) if result.content_score > s + 0.5 => println!(
-                "{name}: improved to {:.2}% (expected {s:.2}%); raise the expectation",
-                result.content_score
-            ),
+            Some(expected) if score > expected => failures.push(format!(
+                "{name}: content score rose to {:.2}% (expected {:.2}%); raise the expectation",
+                result.content_score,
+                expected as f64 / 100.0
+            )),
             Some(_) => {}
         }
     }
     std::fs::write(out.join("report.txt"), &report).unwrap();
     println!("\n{report}");
-    assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    assert!(failures.is_empty(), "\n{report}\n{}", failures.join("\n"));
 }
 
 fn find_chrome() -> PathBuf {
@@ -267,29 +315,88 @@ fn find_chrome() -> PathBuf {
         .expect("Chrome not found; set ERK_CHROME")
 }
 
-fn file_url(path: &Path) -> String {
-    let path = path.canonicalize().unwrap();
-    let path = path.to_string_lossy().replace('\\', "/");
-    let path = path.trim_start_matches("//?/");
-    if path.starts_with('/') {
-        format!("file://{path}")
+/// The version of the Chrome binary that takes the screenshots.
+///
+/// On Windows, `chrome.exe --version` prints nothing: it hands the command
+/// line to an already running Chrome, which opens a window in the user's
+/// own browser. There the version is read from the executable's version
+/// resource instead, which does not start Chrome.
+fn chrome_version(chrome: &Path) -> String {
+    let output = if cfg!(windows) {
+        Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "(Get-Item -LiteralPath $args[0]).VersionInfo.ProductVersion",
+            ])
+            .arg(chrome)
+            .output()
     } else {
-        format!("file:///{path}")
+        Command::new(chrome).arg("--version").output()
+    };
+    let version = output
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+        .unwrap_or_default();
+    assert!(
+        !version.is_empty(),
+        "could not read the version of {}",
+        chrome.display()
+    );
+    if cfg!(windows) {
+        format!("Google Chrome {version}")
+    } else {
+        version
     }
 }
 
-/// Capture Chrome's rendering of every reference page. Not part of the
-/// normal run: it needs Chrome, and references change only when a page is
-/// added or Chrome is upgraded.
+/// A `file://` URL, percent-encoded, for a path on disk.
+fn file_url(path: &Path) -> String {
+    let path = path.canonicalize().unwrap();
+    // canonicalize returns `\\?\C:\...` on Windows, which url rejects.
+    let path = PathBuf::from(path.to_string_lossy().trim_start_matches(r"\\?\"));
+    url::Url::from_file_path(&path)
+        .unwrap_or_else(|()| panic!("{} is not an absolute path", path.display()))
+        .to_string()
+}
+
+/// Capture Chrome's rendering of every reference page that has no
+/// reference yet, or of every page with `ERK_RECAPTURE_ALL=1`. Not part of
+/// the normal run: it needs Chrome.
+///
+/// Capturing only missing pages keeps a new page from silently replacing
+/// the others with whatever Chrome the machine has updated to. A partial
+/// capture is refused when Chrome's version differs from the one recorded
+/// in VERSION.txt, since the references would then mix versions.
 #[test]
 #[ignore]
 fn capture_chrome_references() {
     let chrome = find_chrome();
+    let version = chrome_version(&chrome);
+    let chrome_dir = reference_dir().join("chrome");
+    std::fs::create_dir_all(&chrome_dir).unwrap();
+    let version_file = chrome_dir.join("VERSION.txt");
+    let recorded = std::fs::read_to_string(&version_file).unwrap_or_default();
+    let all = std::env::var_os("ERK_RECAPTURE_ALL").is_some();
+
+    let todo: Vec<_> = pages()
+        .into_iter()
+        .filter(|(name, _)| all || !chrome_dir.join(format!("{name}.png")).exists())
+        .collect();
+    if todo.is_empty() {
+        println!("every page has a Chrome reference; set ERK_RECAPTURE_ALL=1 to recapture");
+        return;
+    }
+    if !all && !recorded.is_empty() {
+        assert!(
+            recorded.contains(&format!("{version} ")),
+            "Chrome is now {version}, but the references were captured with:\n{recorded}\n\
+             Recapture every page with ERK_RECAPTURE_ALL=1 instead of mixing versions."
+        );
+    }
+
     let work = manifest().join("../../target/chrome-capture");
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(&work).unwrap();
-    let chrome_dir = reference_dir().join("chrome");
-    std::fs::create_dir_all(&chrome_dir).unwrap();
 
     // Chrome must draw with the same fonts Erk embeds.
     let fonts = manifest().join("assets/fonts");
@@ -300,7 +407,7 @@ fn capture_chrome_references() {
         file_url(&fonts.join("NotoSans-Bold.ttf")),
     );
 
-    for (name, path) in pages() {
+    for (name, path) in todo {
         let html = std::fs::read_to_string(&path).unwrap();
         let page = work.join(format!("{name}.html"));
         // Inside <head>, after the doctype: anything before `<!DOCTYPE html>`
@@ -333,26 +440,8 @@ fn capture_chrome_references() {
         println!("captured {name}");
     }
 
-    // On Windows, `chrome.exe --version` does not print a version: it hands
-    // the command line to an already running Chrome, which opens a window in
-    // the user's own browser. The version has to come from ERK_CHROME_VERSION
-    // there.
-    let version = std::env::var("ERK_CHROME_VERSION")
-        .ok()
-        .or_else(|| {
-            if cfg!(windows) {
-                return None;
-            }
-            Command::new(&chrome)
-                .arg("--version")
-                .output()
-                .ok()
-                .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
-                .filter(|version| !version.is_empty())
-        })
-        .unwrap_or_else(|| "unknown Chrome version".to_owned());
     std::fs::write(
-        chrome_dir.join("VERSION.txt"),
+        version_file,
         format!(
             "Captured with: {version} ({})\nWindow {WIDTH}x{HEIGHT}, device scale 1, LCD text off, embedded Noto Sans.\n",
             std::env::consts::OS

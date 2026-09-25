@@ -732,7 +732,7 @@ lisans ifadesi bu yüzden `(MIT OR Apache-2.0) AND OFL-1.1`.
 | Çocukları yalnızca metin olan blok bir yaprak | Kapsam biraz genişledi: çocukları **metin ve satır içi elemanlar** olan blok bir paragraf yaprağı; `<b>` gibi elemanların metni paragrafa katılıyor (stilleri değil — tüm paragraf bloğun stiliyle şekilleniyor). Blok çocuklarla karışık metin bırakılıyor; anonim blok kutuları M1'de. |
 | Yazı tipi ölçümleri Task 5'te Parley'e bağlanacak | Parley'e değil **skrifa'ya** (Parley'in kullandığı sürüm, 0.44.0). `erk-style` yazı tipi bilmiyor; `StyleEngine::with_font_metrics` ile sağlayıcıyı dışarıdan alıyor, `erk-renderer` gömülü Noto Sans'tan okuyan `EmbeddedFontMetrics`'i veriyor. Sabit oranlı sağlayıcı yalnızca `erk-style`'ın kendi testlerinde. Test: `10ex` = 86px, `10ch` = 92px (sabit oranlarla 80 olurdu). |
 | — | Sistem yazı tipleri kapalı (`parley` `default-features = false`): ölçüm ve çizim her makinede aynı. CSS `font-family` henüz okunmuyor, her şey Noto Sans. |
-| — | `line-height: normal` → Parley `MetricsRelative(1.0)`: yazı tipinin kendi satır aralığı. 16px Noto Sans'ta bir satır ~21.8px. |
+| — | ~~`line-height: normal` → Parley `MetricsRelative(1.0)`, 16px'te ~21.8px.~~ **Geçersiz (c223b97):** artık ascent, descent ve line gap ayrı ayrı yuvarlanıp toplanıyor, Chrome gibi; 16px Noto Sans'ta satır 22px. |
 | — | Beyaz boşluk `white-space: normal` gibi çöküyor ve kenarlardan kırpılıyor; `pre` ve diğer kipler M1'de. |
 | — | Son layout'tan sonra her paragraf kesin içerik genişliğinde bir kez daha şekilleniyor ve boyama için `Layouts::text` ile saklanıyor. |
 | — | `LayoutTree` artık bir `&mut TextEngine` tutuyor; Taffy'nin GAT'leri bu yüzden uygulamada da `where Self: 'a` istiyor. |
@@ -809,3 +809,33 @@ yükseltildi. Altın görüntü bu değişiklikle bilinçli olarak yeniden onayl
 **Ölçüyle verilen karar — hinting:** glif hinting'i kapatılınca skorlar
 düşüyor (`merhaba` %74.57 → %60.45, `paragraphs` %68.45 → %53.25). Hinting
 açık kalıyor; Chrome'un Windows'taki gri tonlamalı çizimine daha yakın.
+
+### Task 6b — inceleme sonrası sıkılaştırma (2026-09-25)
+
+İki bağımsız inceleyici referans testinde gerçek açıklar buldu. Doğrulayıcı
+ajanlar kullanım limitine takıldığı için bulgular kodla elle doğrulandı.
+
+| Bulgu | Düzeltme |
+|---|---|
+| `SLACK = 0.05` fazlaydı: `blocks`'ta bir kutunun 1px geniş çizilmesi (%99.96) geçiyordu | Skor beklentiye **iki ondalıkta tam eşit** olmalı. |
+| Mandal yalnızca aşağıya işliyordu; yükselen skor bir `println` ile geçiyordu ve CI'da görünmüyordu | Test **iki yönde de kırılır**: yükselen skor, beklenti aynı commit'te yükseltilene kadar kırmızı. |
+| Beklentiyi gerilemenin yanında düşürmek denetlenmiyordu | CI `guards` job'ı PR tabanıyla karşılaştırır; düşüş `# lowered: gerekçe` ister. |
+| "İçerik" eşiği eşleşme toleransıyla aynıydı (24): açık zemindeki beyaz kutular içerik sayılmıyordu | İçerik = tuvalden **herhangi bir** fark. |
+| Eşleşme toleransı 24, düz renkli bir bölgedeki 21'lik farkı gizliyordu (`merhaba`'daki kutu hiç çizilmese de skor değişmiyordu) | Tolerans **12**: referans sayfalarındaki en küçük düz renk farkı 17. Ölçüm: 4/8/12/16/24 için `paragraphs` %19.90/%30.89/%48.27/%56.83/%73.88. |
+| Tuval rengi `HashMap` sırasına bağlıydı; eşitlikte skor değişebilirdi | Eşitlik renk değeriyle bozuluyor. |
+| Sayfası silinen ya da `.htm` uzantılı bir sayfanın kontrolü sessizce kapanıyordu | `pages/` altında yalnızca `.html`; sayfasız beklenti ya da Chrome görüntüsü testi kırar. |
+| Windows'ta `ERK_CHROME_VERSION` yoksa yakalama "unknown" yazıp tüm referansları yeniden yakalıyordu | Sürüm `chrome.exe`'nin sürüm bilgisinden okunuyor (Chrome başlatılmadan); yalnızca eksik sayfalar yakalanıyor; sürüm `VERSION.txt`'tekinden farklıysa kısmi yakalama reddediliyor, `ERK_RECAPTURE_ALL=1` gerekiyor. |
+| Dosya URL'leri yüzde-kodlanmıyordu | `url::Url::from_file_path`. |
+| Fark görüntüsünde `as u8` bölmeden önce uygulanıyordu | `u16`'da hesaplanıp sonra daraltılıyor. |
+| Belge, altın görüntü değişikliğinin ayrı commit olmasını istiyordu; c223b97 bunu yapmadı | Kural çelişkiliydi (ayrı commit, değişikliği yapan commit'i kırmızı bırakırdı). Yeni kural: görüntü, sebebiyle aynı commit'te, gövde nedenini söyler. |
+| Belgeler altın testin `erk --screenshot` kullandığını ve tek iş parçacığının belirleyicilik için yettiğini söylüyordu | Düzeltildi: `render_html` ve `Level::baseline()`. |
+| Task 5 notu eski satır yüksekliğini anlatıyordu | Geçersiz olarak işaretlendi. |
+
+Yeni metrikle skorlar: `blocks` %100.00, `merhaba` %91.26, `paragraphs`
+%48.27. `paragraphs` beklentisi 68.45'ten düştü; sebep render değil metrik,
+satırında `# lowered:` gerekçesi var.
+
+Mutasyonlarla doğrulandı: `blocks`'ta 1px geniş kutu %99.97 ile kırıldı;
+`merhaba`'da beyaz kutu kaldırılınca %10.37 ile kırıldı; `paragraphs.htm`
+doğrudan hata verdi; muhafız betiği yorumsuz düşürmeyi ve Chrome görüntüsü
+dururken beklenti silmeyi reddetti, gerekçeli düşürmeyi kabul etti.

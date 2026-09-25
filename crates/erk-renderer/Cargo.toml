@@ -35,3 +35,4 @@ workspace = true
 
 [dev-dependencies]
 png = "0.18"
+url = "2.5"

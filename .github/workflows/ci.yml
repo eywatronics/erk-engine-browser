@@ -47,9 +47,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The expectations check compares with the base commit.
+          fetch-depth: 0
 
       - name: Install Rust from rust-toolchain.toml
         run: rustup toolchain install
+
+      # The Chrome reference test fails if a score moves in either direction;
+      # what it cannot see is an expectation lowered next to a regression.
+      # A lowered score must say why on its own line.
+      - name: Reference expectations only go down with a written reason
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: bash .github/scripts/check-reference-expectations.sh "$BASE"
 
       # unsafe_code = "forbid" lives in [workspace.lints]; a crate that drops
       # `[lints] workspace = true` silently opts out of it. The named
