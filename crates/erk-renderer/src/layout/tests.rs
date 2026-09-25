@@ -136,9 +136,10 @@ fn one_line() -> f32 {
 
 #[test]
 fn a_paragraph_is_one_line_high() {
-    // Noto Sans: (ascender 1069 + descender 293) / 1000 × 16px ≈ 21.8px.
-    let line = one_line();
-    assert!((21.0..23.0).contains(&line), "line height was {line}");
+    // Noto Sans at 16px: ascent 17.10 rounds to 17, descent 4.69 to 5, no
+    // line gap, as Chrome computes `line-height: normal`. Unrounded it
+    // would be 21.79.
+    assert_eq!(one_line(), 22.0);
 }
 
 #[test]

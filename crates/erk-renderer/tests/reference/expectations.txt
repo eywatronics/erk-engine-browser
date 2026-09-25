@@ -3,4 +3,4 @@
 # the same commit: the numbers only go up. See CLAUDE.md, "Referans testi".
 blocks 100.00
 merhaba 74.57
-paragraphs 22.17
+paragraphs 68.45

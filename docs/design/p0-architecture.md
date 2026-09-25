@@ -252,6 +252,10 @@ görselleri bilmez. Bunu Erk yazar. Referanslar: Servo'nun `layout` crate'i
   sistem yazı tipleri yüklenmez: ölçüm ve çizim her makinede aynıdır. Stylo'nun
   `ex`/`ch` gibi birimleri için yazı tipi ölçümlerini `erk-style` bilmez;
   `erk-renderer` aynı gömülü fonttan okuyan bir sağlayıcıyı dışarıdan verir.
+- `line-height: normal`, Chrome'un yaptığı gibi fontun ascent, descent ve
+  line gap değerlerini ayrı ayrı tam piksele yuvarlayıp toplar. Yuvarlamadan
+  her satır ~0.2px kısa kalıyor ve fark sayfa boyunca birikiyordu (Chrome
+  referans testi buldu).
 - **M0'da** tam IFC yok: bir paragraf Taffy'de ölçüm fonksiyonlu bir yapraktır.
   Parley paragrafı şekillendirip satırlara böler, Taffy'ye yalnızca
   `(genişlik, yükseklik)` döner; aynı Parley layout'u boyamada tekrar

@@ -799,3 +799,13 @@ Kasıtlı ihlal: UA stil sayfasında body margin'i 8px → 10px. `paragraphs`
 (varsayılan body margin'ini kullanan tek sayfa) %6.47'ye düştü ve test
 "fell below the expected 22.17%" ile kırıldı; diğer iki sayfa kendi
 margin'lerini tanımladığı için doğru olarak etkilenmedi. Geri alınınca yeşil.
+
+**Düzeltme (ayrı commit):** `line-height: normal` artık fontun ascent,
+descent ve line gap değerlerini ayrı ayrı tam piksele yuvarlayıp topluyor
+(16px Noto Sans'ta 22px). Skorlar: `paragraphs` %22.17 → %68.45, `blocks`
+%100.00 ve `merhaba` %74.57 değişmedi; `paragraphs` beklentisi 68.45'e
+yükseltildi. Altın görüntü bu değişiklikle bilinçli olarak yeniden onaylandı.
+
+**Ölçüyle verilen karar — hinting:** glif hinting'i kapatılınca skorlar
+düşüyor (`merhaba` %74.57 → %60.45, `paragraphs` %68.45 → %53.25). Hinting
+açık kalıyor; Chrome'un Windows'taki gri tonlamalı çizimine daha yakın.

@@ -43,9 +43,9 @@ impl Paragraph {
     /// `white-space: normal` does.
     pub(crate) fn new(text: &str, style: &ComputedValues) -> Self {
         let font_size = style.get_font().clone_font_size().computed_size().px();
+        let weight = style.clone_font_weight().value();
         let line_height = match style.clone_line_height() {
-            // `normal` is the font's own line spacing: ascent + descent + gap.
-            CssLineHeight::Normal => LineHeight::MetricsRelative(1.0),
+            CssLineHeight::Normal => LineHeight::Absolute(normal_line_height(font_size, weight)),
             CssLineHeight::Number(number) => LineHeight::FontSizeRelative(number.0),
             CssLineHeight::Length(length) => LineHeight::Absolute(length.0.px()),
         };
@@ -53,9 +53,31 @@ impl Paragraph {
             text: collapse_whitespace(text),
             font_size,
             line_height,
-            weight: style.clone_font_weight().value(),
+            weight,
             color: TextBrush(srgb_bytes(style.clone_color())),
         }
+    }
+}
+
+/// `line-height: normal`: the font's ascent, descent and line gap, each
+/// rounded to whole pixels before they are added. The rounding is what
+/// Chrome does, and it matters: unrounded, a 16px Noto Sans line is 21.79px
+/// instead of 22, and the shortfall accumulates down the page (found by the
+/// Chrome reference test).
+fn normal_line_height(font_size: f32, weight: f32) -> f32 {
+    use skrifa::instance::{LocationRef, Size as FontSize};
+    use skrifa::{FontRef, MetadataProvider};
+
+    let font = FontRef::new(face_for(weight)).expect("embedded font parses");
+    let metrics = font.metrics(FontSize::new(font_size), LocationRef::default());
+    metrics.ascent.round() + (-metrics.descent).round() + metrics.leading.round()
+}
+
+fn face_for(weight: f32) -> &'static [u8] {
+    if weight >= 600.0 {
+        NOTO_SANS_BOLD
+    } else {
+        NOTO_SANS_REGULAR
     }
 }
 
@@ -84,12 +106,8 @@ impl FontMetricsProvider for EmbeddedFontMetrics {
         use skrifa::instance::{LocationRef, Size as FontSize};
         use skrifa::{FontRef, MetadataProvider};
 
-        let data = if font.font_weight.value() >= 600.0 {
-            NOTO_SANS_BOLD
-        } else {
-            NOTO_SANS_REGULAR
-        };
-        let font_ref = FontRef::new(data).expect("embedded font parses");
+        let font_ref =
+            FontRef::new(face_for(font.font_weight.value())).expect("embedded font parses");
         let size = FontSize::new(font_size.px());
         let metrics = font_ref.metrics(size, LocationRef::default());
         let zero_advance = font_ref.charmap().map('0').and_then(|glyph| {
