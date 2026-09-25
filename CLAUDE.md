@@ -60,7 +60,7 @@ geçtiği ilgili planın "Yürütme Notları"na yazılır.
 | Kural | Neden | Zorlama | Devreye girdiği yer |
 |---|---|---|---|
 | `unsafe` yasak | Bellek güvenliği projenin var olma sebebi. İstisna yalnızca FFI crate'lerinde, adıyla. | `[workspace.lints.rust] unsafe_code = "forbid"`, her crate `lints.workspace = true` | M0 Task 1 |
-| `erk-dom` içinde `std::rc::Rc` yok | Döngüsel ağaçta referans sayımı sızıntı üretir; DOM arena + `NodeId` ile çalışır | `crates/erk-dom/clippy.toml` → `disallowed-types`, clippy `-D warnings` | M0 Task 2 |
+| `erk-dom` içinde `std::rc::Rc` yok | Döngüsel ağaçta referans sayımı sızıntı üretir; DOM arena + `NodeId` ile çalışır | `crates/erk-dom/clippy.toml` → `disallowed-types`, clippy `-D warnings`; `guards` job'ı lint'in `allow` ile susturulmadığını kontrol eder | M0 Task 2 |
 | `erk-dom` projeden hiçbir şey import etmez | En alttaki katman; parser dışında her şey ona bağlanır, o hiçbir şeye | CI'da `cargo tree -p erk-dom` kontrolü | M0 Task 2 |
 | Kabuk ile renderer yalnızca mesajla konuşur | M3'te renderer ayrı sürece taşındığında değişen tek şey taşıma katmanı olsun. Paylaşılan değiştirilebilir durum (`Arc<Mutex<Dom>>`) süreç ayrımını yeniden yazıma çevirir | `erk-shell` doğrudan `erk-dom`'a bağımlı olamaz (CI'da `cargo tree --depth 1`); `erk-renderer` DOM tiplerini dışa açmaz; mesaj tipleri sahip oldukları veriyi taşır | M0 Task 7 |
 | `html5ever` ve `stylo` birlikte yükseltilir | İkisi `web_atoms`/`string_cache` üzerinden aynı atom tiplerini paylaşmak zorunda; html5ever 0.40 ile Stylo 0.21 uyumsuz | `html5ever = "=0.39.0"` sabit; CI'da `web_atoms` ve `string_cache` için tek sürüm kontrolü | M0 Task 3 |

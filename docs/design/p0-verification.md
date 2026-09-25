@@ -18,8 +18,9 @@ yazıldığında doldurulur.
 |---|---|---|---|---|
 | `unsafe` yasak | `[workspace.lints.rust] unsafe_code = "forbid"`; her crate `[lints] workspace = true` | `erk-dom` içinde bir `unsafe {}` bloğu → derleme hatası | M0 T1 | 2026-09-25, yakaladı |
 | Her crate workspace lint'ini devralır | CI `guards` job'ı: `lints.workspace = true` içermeyen `Cargo.toml` (istisna listesi dışında) → hata | Bir crate'ten `[lints]` bloğunu silmek | M0 T1 | 2026-09-25, yakaladı |
-| `erk-dom`'da `Rc` yok | `crates/erk-dom/clippy.toml` → `disallowed-types`; clippy `-D warnings` | `use std::rc::Rc;` ve bir alan → clippy hatası | M0 T2 | — |
-| `erk-dom` yapraktır | CI: `cargo tree -p erk-dom --prefix none -e normal` çıktısında başka `erk-*` yok | `erk-dom`'a `erk-renderer` bağımlılığı eklemek | M0 T2 | — |
+| `erk-dom`'da `Rc` yok | `crates/erk-dom/clippy.toml` → `disallowed-types`; clippy `-D warnings` | `use std::rc::Rc;` ve bir alan → clippy hatası | M0 T2 | 2026-09-25, yakaladı |
+| `Rc` yasağı susturulamaz | CI `guards`: `erk-dom` içinde `disallowed_types` geçmez (bir `allow` özniteliği lint'i kapatırdı) | `#[allow(clippy::disallowed_types)]` eklemek | M0 T2 | 2026-09-25, yakaladı |
+| `erk-dom` yapraktır | CI `guards`: `cargo tree -p erk-dom --prefix none -e normal` çıktısında başka `erk-*` yok | `erk-dom`'a `erk-network` bağımlılığı eklemek | M0 T2 | 2026-09-25, yakaladı |
 | html5ever + Stylo tek atom sürümü | CI: `cargo tree -d` çıktısında `web_atoms` veya `string_cache` iki sürümle görünürse hata | `html5ever`'ı 0.40'a çekmek | M0 T3 | — |
 | Kabuk DOM'a dokunamaz | CI: `cargo tree -p erk-shell -e normal --depth 1` çıktısında `erk-dom` yok. `--depth 1` bilerek: `erk-shell → erk-renderer → erk-dom` zinciri dolaylı olarak her zaman görünür | `erk-shell`'e `erk-dom` bağımlılığı eklemek | M0 T7 | — |
 | Render çıktısı değişmez | Altın PNG testi (`cargo test`) | Varsayılan yazı rengini değiştirmek | M0 T6 | — |

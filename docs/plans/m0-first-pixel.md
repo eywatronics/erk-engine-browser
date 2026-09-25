@@ -204,7 +204,7 @@ workspace-wide`.
   `ElementData`, `Document::parse_html(&str) -> Document`, gezinme
   (`children(id)`, `parent(id)`, `node(id)`)
 
-- [ ] **Step 1: `Rc` muhafızı**
+- [x] **Step 1: `Rc` muhafızı**
 
 ```toml
 # crates/erk-dom/clippy.toml
@@ -218,7 +218,7 @@ Kasıtlı ihlal: `lib.rs`'e `pub struct Violation(std::rc::Rc<u8>);`, sonra
 `cargo clippy -p erk-dom -- -D warnings`. Beklenen: `disallowed_types` hatası.
 Geri al.
 
-- [ ] **Step 2: Arena testlerini yaz (önce kırmızı)**
+- [x] **Step 2: Arena testlerini yaz (önce kırmızı)**
 
 `src/arena.rs` içindeki `#[cfg(test)] mod tests`:
 
@@ -229,7 +229,7 @@ Geri al.
   yardımcı) silindiğinde serbest listeye **girmez**
 - `size_of::<Option<NodeId>>() == 8`
 
-- [ ] **Step 3: Arenayı yaz**
+- [x] **Step 3: Arenayı yaz**
 
 ```rust
 use std::num::NonZeroU32;
@@ -298,7 +298,7 @@ impl<T> Arena<T> {
 
 Çalıştır: `cargo test -p erk-dom`. Beklenen: arena testleri yeşil.
 
-- [ ] **Step 4: Düğüm modeli ve ağaç işlemleri**
+- [x] **Step 4: Düğüm modeli ve ağaç işlemleri**
 
 `Node`: `parent`, `first_child`, `last_child`, `prev_sibling`, `next_sibling`
 (hepsi `Option<NodeId>`) ve `data: NodeData`. `NodeData`: `Document`,
@@ -311,7 +311,7 @@ impl<T> Arena<T> {
 Testler: ekleme sırası, `insert_before` başa ekleme, `detach` sonrası kardeş
 bağlarının onarılması.
 
-- [ ] **Step 5: `TreeSink`**
+- [x] **Step 5: `TreeSink`**
 
 html5ever 0.39'un `TreeSink`'i `&self` alır; `Document` bu yüzden bir `RefCell`
 içinde durur (`RefCell` yasak değil, `Rc` yasak). `Handle = NodeId`.
@@ -327,7 +327,7 @@ sink'i (aynı html5ever sürümü). Dikkat edilecekler:
   gerekli, stub bırakılmaz
 - `get_template_contents` `<template>` için ayrı bir belge parçası düğümü döner
 
-- [ ] **Step 6: Ayrıştırma testleri**
+- [x] **Step 6: Ayrıştırma testleri**
 
 `tests/parse.rs`:
 
@@ -339,7 +339,7 @@ sink'i (aynı html5ever sürümü). Dikkat edilecekler:
 - `<b><p>x</b>y</p>` → biçimlendirme öğesi yeniden inşası (adoption agency)
   html5lib'in beklediği ağacı veriyor
 
-- [ ] **Step 7: Yaprak muhafızı**
+- [x] **Step 7: Yaprak muhafızı**
 
 CI'ya:
 
@@ -355,7 +355,7 @@ CI'ya:
 Kasıtlı ihlal: `erk-dom`'a `erk-network = { path = "../erk-network" }`, betik
 yerelde. Beklenen: hata. Geri al.
 
-- [ ] **Step 8: Doğrula ve commit'le**
+- [x] **Step 8: Doğrula ve commit'le**
 
 fmt, clippy, test yeşil. Commit: `feat(dom): arena DOM with generational node
 ids and html5ever sink`.
@@ -615,3 +615,32 @@ Kasıtlı ihlaller:
   [workspace.lints]" ile çıkış kodu 1. Geri alınınca 0.
 
 `Cargo.lock` ilk kez işlendi (Erk bir uygulama; bkz. doğrulama §2).
+
+### Task 2 tamamlandı (2026-09-25)
+
+| Plan ne diyordu | Gerçek |
+|---|---|
+| `html5ever::QuirksMode` | Kök düzeyde yok; `html5ever::tree_builder::QuirksMode`. |
+| `TreeSink::ElemName` ilişkili tipi docs'tan okunacak | markup5ever 0.39 `Ref<'_, QualName>` için `ElemName` sağlıyor. Belge düzeyinde tek `RefCell` ve `Ref::map` yetiyor. Tree builder bir isim `Ref`'ini tutarken değiştirici bir çağrı yapsaydı çakışma paniği verirdi; adoption agency ve foster parenting testleri bunu tetiklemedi. |
+| Metin ve öznitelik tipi belirtilmemişti | `String`, `StrTendril` değil. Tendril `Send` değil; Stylo'nun ileride paralel gezinmesi DOM'un iş parçacıkları arasında paylaşılmasını istiyor. `html5ever::Attribute` bu yüzden kendi `Attribute` tipimize çevriliyor. |
+| — | Yan tablolar için `NodeId::index()` ve `Document::capacity_hint()` eklendi (Task 3 ve 4'te Stylo ve Taffy verisi için). |
+| — | Ayrılan düğümler arenadan silinmiyor; silme API'si yok. Düğüm sahipliği M4'te JS ile birlikte karar verilecek (tasarım §5.3). |
+| — | Ayrıştırma hataları yok sayılıyor: tree builder spesifikasyonun kurtarmasını zaten uyguluyor. |
+
+**Planın öngörmediği muhafız:** clippy'nin `disallowed_types` lint'i
+`#[allow(clippy::disallowed_types)]` ile susturulabiliyor. `guards` job'ına
+`erk-dom` içinde bu ifadenin geçmediğini kontrol eden bir adım eklendi.
+
+Kasıtlı ihlaller:
+
+- `erk-dom`'a `pub struct Violation(pub std::rc::Rc<u8>);` → clippy: "use of a
+  disallowed type `std::rc::Rc`". Geri alınınca yeşil.
+- `erk-dom`'a `erk-network` bağımlılığı → yaprak betiği `erk-network`'ü basıp 1
+  ile çıktı. Geri alınınca 0.
+- `lib.rs`'e `#[allow(clippy::disallowed_types)]` → betik satırı basıp 1 ile
+  çıktı. Geri alınınca 0.
+- **Testin kendisi de sınandı:** `append_before_sibling`'deki metin birleştirme
+  kapatılınca foster parenting testi `"a","b"` ≠ `"ab"` ile kırmızı.
+
+html5ever 0.39.0'ın çözdüğü atom crate'leri `web_atoms` 0.2.6 ve `string_cache`
+0.9.0; Stylo'nun beklediği hat bu.

@@ -48,6 +48,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust from rust-toolchain.toml
+        run: rustup toolchain install
+
       # unsafe_code = "forbid" lives in [workspace.lints]; a crate that drops
       # `[lints] workspace = true` silently opts out of it.
       - name: Every crate inherits the workspace lints
@@ -60,3 +63,21 @@ jobs:
             fi
           done
           exit $fail
+
+      # The DOM is the bottom layer: everything above may depend on it, it
+      # depends on no other workspace crate.
+      - name: erk-dom depends on no other workspace crate
+        run: |
+          if cargo tree -p erk-dom -e normal --prefix none | grep -E '^erk-' | grep -v '^erk-dom '; then
+            echo "erk-dom must stay a leaf crate"
+            exit 1
+          fi
+
+      # clippy's disallowed_types can be silenced with an allow attribute,
+      # which would quietly bring reference-counted nodes back.
+      - name: The Rc ban in erk-dom is not silenced
+        run: |
+          if grep -rn 'disallowed_types' crates/erk-dom/src crates/erk-dom/tests; then
+            echo "do not allow clippy::disallowed_types in erk-dom"
+            exit 1
+          fi

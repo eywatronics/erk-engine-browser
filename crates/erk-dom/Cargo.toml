@@ -9,6 +9,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+html5ever = "=0.39.0"
 
 [lints]
 workspace = true
