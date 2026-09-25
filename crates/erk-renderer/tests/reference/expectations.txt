@@ -1,0 +1,6 @@
+# Minimum content score (percent of content pixels matching Chrome) per page.
+# A score below its line fails the test. A score that rises is raised here in
+# the same commit: the numbers only go up. See CLAUDE.md, "Referans testi".
+blocks 100.00
+merhaba 74.57
+paragraphs 22.17

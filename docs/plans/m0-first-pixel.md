@@ -505,6 +505,23 @@ stiller M1'de.
 
 ---
 
+### Task 6b: Chrome referans testi
+
+Kullanıcının isteğiyle eklendi (2026-09-25): aynı HTML Chrome'da ve Erk'te
+çizilir, görüntüler piksel piksel karşılaştırılır. Motor büyüdükçe
+gerilemelere karşı ikinci bir kalkan: altın test Erk'in kendisiyle **tam
+eşitliği**, referans testi **Chrome'a yakınlığı** korur.
+
+- [x] Referans sayfaları: `examples/merhaba.html`, `tests/reference/pages/*.html`
+- [x] Chrome görüntüleri bir kez yakalanıp depoya konur (`tests/reference/chrome/`,
+  `VERSION.txt`); CI'da Chrome gerekmez
+- [x] Skor: içerik piksellerinde (tuval renginden farklı olan) eşleşme yüzdesi,
+  kanal başına 24'e kadar fark eşleşme sayılır
+- [x] Beklentiler (`tests/reference/expectations.txt`): skor düşerse test kırılır,
+  yükselirse beklenti yükseltilir (mandal)
+- [x] Fark görüntüleri ve rapor `target/reference-diff/` altında
+- [x] Kural CLAUDE.md'ye yazılır
+
 ### Task 7: Kabuk — pencere ve renderer iş parçacığı
 
 **Files:**
@@ -749,3 +766,36 @@ Testler: `tests/golden.rs` (altın görüntü, iki çizimin bayt bayt aynı olma
 Kasıtlı ihlal: glif hinting'i kapatıldı (`.hint(false)`) → altın test
 kırmızı, gerçek çıktı ve döküm `target/golden-actual/` altında. Geri alınınca
 yeşil.
+
+### Task 6b tamamlandı (2026-09-25)
+
+Chrome 153.0.8010.53 (Windows) ile yakalandı: başsız, ayrı ve geçici profil,
+800×600, ölçek 1, LCD (renkli alt piksel) yumuşatma kapalı, gömülü Noto Sans
+`@font-face` ile enjekte edilerek.
+
+İlk skorlar (içerik / tüm pikseller): `blocks` %100.00 / %100.00,
+`merhaba` %74.57 / %99.37, `paragraphs` %22.17 / %97.97. `blocks` Chrome ile
+piksel piksel aynı: box layout birebir örtüşüyor. Tüm-piksel skorunun
+`paragraphs`'ta bile %98 olması, içerik skorunun neden gerekli olduğunu
+gösteriyor.
+
+**Yakalamada iki hata yapıldı ve düzeltildi:**
+
+- Yazı tipi `<style>`'ı sayfanın **başına**, `<!DOCTYPE html>`'in önüne
+  eklenmişti. Doctype ilk olmayınca Chrome quirks moduna geçiyor ve body'nin
+  ilk çocuğunun üst margin'ini yok sayıyor; `paragraphs` %1.66 çıkmıştı.
+  Stil artık `<head>`'in içine ekleniyor.
+- Sürüm için `chrome.exe --version` çağrılmıştı. Windows'ta bu sürüm basmıyor,
+  komutu **kullanıcının açık Chrome'una devrediyor** (yeni pencere/sekme
+  açabilir). Windows'ta artık çağrılmıyor; sürüm `ERK_CHROME_VERSION`'dan.
+
+**Testin ilk bulduğu gerçek sapma:** `line-height: normal`'da Chrome fontun
+ascent ve descent değerlerini ayrı ayrı tam piksele yuvarlıyor (16px Noto
+Sans: 17.10 → 17, 4.69 → 5, satır 22px); Erk yuvarlamadan 21.79 kullanıyor.
+Her paragraf kutusu ~0.2px kısa kalıyor ve fark sayfa boyunca birikiyor
+(`paragraphs`'ta alt satırlar ~2px yukarıda). Düzeltme ayrı bir commit'te.
+
+Kasıtlı ihlal: UA stil sayfasında body margin'i 8px → 10px. `paragraphs`
+(varsayılan body margin'ini kullanan tek sayfa) %6.47'ye düştü ve test
+"fell below the expected 22.17%" ile kırıldı; diğer iki sayfa kendi
+margin'lerini tanımladığı için doğru olarak etkilenmedi. Geri alınınca yeşil.

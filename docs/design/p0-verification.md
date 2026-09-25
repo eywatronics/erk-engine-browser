@@ -27,6 +27,7 @@ yazıldığında doldurulur.
 | Stylo tutamağı tek işaretçi genişliğinde | `const _: () = assert!(size_of::<ErkNode>() == size_of::<usize>())` (derleme zamanı) | — (16 baytlık ilk tutamak Stylo'nun çalışma zamanı `assert`'ünde düştü; bu kontrol onu derlemeye taşıdı) | M0 T3 | — |
 | Kabuk DOM'a dokunamaz | CI: `cargo tree -p erk-shell -e normal --depth 1` çıktısında `erk-dom` yok. `--depth 1` bilerek: `erk-shell → erk-renderer → erk-dom` zinciri dolaylı olarak her zaman görünür | `erk-shell`'e `erk-dom` bağımlılığı eklemek | M0 T7 | — |
 | Render çıktısı değişmez | Altın PNG testi (`cargo test`), çözülmüş piksellerle | Glif hinting'ini kapatmak | M0 T6 | 2026-09-25, yakaladı |
+| Chrome'a yakınlık gerilemez | `tests/chrome_reference.rs`: sayfa başına içerik skoru `expectations.txt`'teki değerin altına düşemez (mandal) | UA stil sayfasında body margin'i 8px → 10px (`paragraphs` %22.17 → %6.47) | M0 T6b | 2026-09-25, yakaladı |
 | Lisans izin listesi | `cargo deny check licenses` | GPL lisanslı bir geliştirme bağımlılığı | M1 | — |
 | WPT gerilemesi yok | wptrunner "erk" ürünü + beklenti dosyaları; taban çizgisinin altı PR'ı kırar | Geçen bir reftest'i bozan değişiklik | M1 | — |
 | Renderer ağa bağımlı değil | CI: `cargo tree -p erk-renderer` çıktısında `erk-network`, `reqwest`, `hyper`, `tokio` yok | `erk-renderer`'a `reqwest` eklemek | M2 | — |
@@ -66,7 +67,21 @@ Belirleyicilik için: sabit pencere boyutu, sabit DPI (1x), depoda gömülü yaz
 tipi (sistem yazı tipine bağlı test, makineden makineye değişir), `vello_cpu`
 tek iş parçacığında.
 
-### 3.2 WPT (M1'den itibaren)
+### 3.2 Chrome referans testi (M0 T6b'den itibaren)
+
+Aynı sayfa Chrome'da ve Erk'te çizilir; Chrome görüntüleri bir kez yakalanıp
+depoya konur (`crates/erk-renderer/tests/reference/chrome/`). Skor, içerik
+piksellerinin (tuval renginden kanal başına 24'ten fazla ayrışan pikseller)
+kaçının Chrome'la kanal başına 24'e kadar farkla eşleştiği. Yalnızca tüm
+piksellere bakılsaydı metin hiç çizilmeyen bir sayfa bile %95'in üstünde
+çıkardı. Beklentiler `expectations.txt`'te ve yalnızca yükselir. Kurallar
+CLAUDE.md'de.
+
+WPT reftest'leri (aşağıda) bununla çakışmaz: WPT, spesifikasyonun istediğini
+iki sayfanın aynı çizilmesiyle doğrular; Chrome testi, gerçek bir tarayıcıdan
+ne kadar uzak olduğumuzu ölçer.
+
+### 3.3 WPT (M1'den itibaren)
 
 - wptrunner'a "erk" ürünü: her reftest için `erk --screenshot` iki kez
   (test ve referans) çalışır, PNG'ler karşılaştırılır.

@@ -121,6 +121,42 @@ zorlama yöntemi: [p0-verification.md](docs/design/p0-verification.md).
 - Planın bir varsayımı yürütmede yanlış çıkarsa, düzeltilmiş gerçek o planın
   "Yürütme Notları"na yazılır; sonraki görevler oradan okunur.
 
+## Referans testi (Chrome karşılaştırması)
+
+Aynı HTML hem Chrome'da hem Erk'te çizilir ve görüntüler piksel piksel
+karşılaştırılır (`crates/erk-renderer/tests/chrome_reference.rs`). Altın test
+Erk'in kendi çıktısıyla **tam eşitliği** korur; referans testi **Chrome'a
+yakınlığı** korur. Piksel piksel aynılık hedef değil (kenar yumuşatma ve
+hinting farklı); sayfa başına bir içerik skoru var ve skor yalnızca yükselir.
+
+- **Render'ı etkileyen her önemli değişiklikten sonra çalıştırılır:** stil,
+  layout, metin, boyama, UA stil sayfası, render bağımlılıklarının
+  yükseltilmesi.
+
+  ```
+  cargo test -p erk-renderer --test chrome_reference -- --nocapture
+  ```
+
+  Skor tablosu commit gövdesine ve PR açıklamasına yazılır. Test `cargo test
+  --workspace` içinde CI'da da koşar; Chrome gerektirmez.
+- **Skor beklentinin altına düşerse değişiklik birleşmez.** Düşüş bilinçliyse
+  (ör. Erk'in önceki çıktısı yanlış bir sebeple yakındı) gerekçe yazılır ve
+  beklentiyi düşürmek ayrı bir commit'tir.
+- **Skor yükselirse beklenti aynı commit'te yükseltilir**
+  (`tests/reference/expectations.txt`). Sayılar yalnızca yukarı gider.
+- **Her yeni render özelliği kendi referans sayfasıyla gelir** (kenarlık,
+  görüntü, float, ...), muhafız ilkesiyle aynı gerekçe.
+- **Chrome görüntüleri yalnızca yeni sayfa eklenince veya Chrome
+  yükseltilince yeniden yakalanır**, ayrı bir commit'te, `VERSION.txt` ile:
+
+  ```
+  cargo test -p erk-renderer --test chrome_reference -- --ignored capture_chrome_references
+  ```
+
+  Windows'ta sürüm `ERK_CHROME_VERSION` ortam değişkeninden alınır. Bir
+  referans sayfası değişirse Chrome görüntüsü de yeniden yakalanır.
+- Fark görüntüleri ve rapor `target/reference-diff/` altındadır.
+
 ## Dokümanlar
 
 - Mimari kararlar: `docs/design/`
