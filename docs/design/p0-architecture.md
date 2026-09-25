@@ -235,7 +235,13 @@ Blitz'in yaptığı gibi düğüme ağaca işaret eden ham bir işaretçi koymak
 
 Taffy'nin low-level API'si kullanılır (`LayoutPartialTree` ve ilgili trait'ler):
 Erk'in DOM'u layout ağacıdır, ayrı bir `TaffyTree` kopyası tutulmaz. Stylo'nun
-hesaplanmış değerleri `stylo_taffy` ile Taffy stiline çevrilir.
+hesaplanmış değerleri `stylo_taffy` ile Taffy stiline çevrilir (üçlü lisanslı;
+MIT OR Apache-2.0 altında kullanılıyor).
+
+`stylo_taffy`, `calc()` değerlerini Taffy'ye ham işaretçi olarak geçirir ve
+Taffy çözümleme için işaretçiyi geri verir. Blitz onu `unsafe` ile izler.
+Erk izlemez: layout ağacı kurulurken `calc()` değerleri adresleriyle bir
+tabloya kopyalanır, işaretçi yalnızca anahtar olur (`erk-renderer/src/layout/calc.rs`).
 
 **Özgün iş: inline formatting context.** Taffy satır kutularını, span
 kırılmasını, `text-align: justify`'ı, `vertical-align`'ı ve satır içi

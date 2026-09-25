@@ -50,7 +50,7 @@ Bu kısıtlar her görevin gereksinimlerine örtük olarak dahildir.
   parçacığında.
 - **Referans kodun kullanımı:** Blitz (MIT OR Apache-2.0) kodu uyarlanırken
   dosya başına kaynak yorumu yazılır (`Adapted from blitz-dom 0.3.0-beta.2,
-  src/stylo.rs`). MPL-2.0 bir dosya (`stylo_taffy`, Servo) **kopyalanmaz**,
+  src/stylo.rs`). MPL-2.0 bir dosya (ör. Servo veya Firefox kaynağı) **kopyalanmaz**,
   bağımlılık olarak kullanılır.
 - **Test disiplini:** Her görev testle başlar. `cargo test --workspace` yeşil
   olmadan commit yapılmaz; derlenmemiş kod commit'lenmez.
@@ -434,21 +434,21 @@ Blitz'ten uyarlandığını ve yan tablo sapmasının sebebini söyler.
 **Files:**
 - Create: `crates/erk-renderer/src/layout/mod.rs`
 
-- [ ] **Step 1:** Taffy 0.14'ün low-level trait'leri (`TraversePartialTree`,
+- [x] **Step 1:** Taffy 0.14'ün low-level trait'leri (`TraversePartialTree`,
   `LayoutPartialTree`, `CacheTree` ve ilgili) docs.rs'ten okunur. Layout ağacı
   Erk'in DOM'udur; düğüm başına `taffy::Style`, `Cache` ve `Layout` bir yan
   tabloda (`NodeId::index()`) durur.
-- [ ] **Step 2:** Stylo'nun `ComputedValues`'u `stylo_taffy` ile
+- [x] **Step 2:** Stylo'nun `ComputedValues`'u `stylo_taffy` ile
   `taffy::Style`'a çevrilir (bağımlılık olarak; MPL dosyası kopyalanmaz).
   `display: none` alt ağaçları layout'a girmez.
-- [ ] **Step 3: Testler:**
+- [x] **Step 3: Testler:**
   - `width: 100px` bir `div` → layout genişliği 100
   - iki blok kardeş alt alta; toplam yükseklik ikisinin toplamı
   - `margin-top` konumu kaydırıyor
   - iki kardeş arasında margin collapsing (Taffy'nin block layout'u bunu
     yapıyor mu burada ölçülür; yapmıyorsa bu M1'in akış layout'u kararına veri
     olur ve Yürütme Notları'na yazılır)
-- [ ] **Step 4:** Commit: `feat(layout): block layout on the DOM with Taffy`.
+- [x] **Step 4:** Commit: `feat(layout): block layout on the DOM with Taffy`.
 
 ---
 
@@ -679,3 +679,24 @@ Kasıtlı ihlaller:
   muhafız sebebi daha açık söylüyor. Geri alınınca 0.
 
 `stylo_taffy` henüz eklenmedi; Task 4'te gelecek.
+
+### Task 4 tamamlandı (2026-09-25)
+
+| Plan ne diyordu | Gerçek |
+|---|---|
+| `stylo_taffy` MPL-2.0, yalnızca bağımlılık olarak | `stylo_taffy` 0.3.0-beta.2'nin lisansı **"MIT OR Apache-2.0 OR MPL-2.0"**; Erk onu MIT OR Apache-2.0 altında kullanıyor. Araştırma notundaki "MPL" eksikti. Sürüm blitz-dom 0.3.0-beta.2'ninkiyle aynı (Stylo 0.20 ile eşleşiyor). |
+| — | **`calc()` için Blitz'in yolu `unsafe` istiyordu.** `stylo_taffy`, `calc()` değerlerini Taffy'ye Stylo'nun `CalcLengthPercentage`'ine işaret eden ham işaretçiler olarak geçiriyor ve bu yüzden Taffy'nin `calc` özelliğini zorunlu kılıyor. Taffy çözümleme için işaretçiyi `resolve_calc_value` ile geri veriyor; Blitz onu `unsafe` ile izliyor. `erk-renderer` `forbid` altında. Çözüm (`layout/calc.rs`): layout ağacı kurulurken her düğümün `calc()` değerleri adresleriyle bir tabloya kopyalanıyor, Taffy'nin işaretçisi yalnızca **anahtar** olarak kullanılıyor, hiç izlenmiyor. Kapsam: boyutlar, min/max boyutlar, margin, padding ve inset. Tabloda olmayan bir adres debug derlemede `debug_assert` ile patlıyor, release'de 0'a düşüyor (Taffy'nin çözücüsüz davranışı). Grid track'leri ve `gap` henüz tabloda değil. |
+| Margin collapsing ölçülecek | **Taffy yapıyor:** kardeşler arasında `margin-bottom: 20px` ve `margin-top: 30px` → aradaki boşluk 30 (CSS 2 §8.3.1), 50 değil. |
+| Layout ağacı | Erk'in DOM'u layout ağacı; Taffy'nin düğüm başına durumu (`Style`, `Cache`, yuvarlanmamış ve son `Layout`) `NodeId::index()` ile bir yan tabloda. Blok, flow-root, flex ve grid bağlanmış; M0 testleri blok. Belge düğümü ilk kapsayıcı bloğun kutusu. |
+| Testler crate dışından | Layout modülü `pub(crate)`, testler modül içinde. Sebep: `erk-renderer`'ın genel yüzeyi Task 7'de yalnızca iş parçacığı ve mesajlar olacak; kabuk DOM tiplerini görmemeli. |
+
+Testler (`erk-renderer/src/layout/tests.rs`, 8 test): açık genişlik, varsayılan
+genişliğin kapsayıcıyı doldurması, blokların alt alta dizilmesi ve ebeveyn
+yüksekliği, `margin-top`, margin collapsing, `display: none`, `calc(50% - 20px)`,
+padding ve border'ın border-box'ı genişletmesi.
+
+**Testin kendisi de sınandı:** `resolve_calc_value` geçici olarak hep 0 dönecek
+şekilde değiştirilince `calc()` testi `0.0` ≠ `380.0` ile kırmızı.
+
+Bu görev yeni bir mimari kural getirmedi. `erk-renderer`'ın işaretçi
+izlememesini `forbid(unsafe_code)` zaten zorluyor.
