@@ -252,7 +252,9 @@ fn erk_matches_its_recorded_distance_from_chrome() {
             continue;
         };
         let html = std::fs::read_to_string(path).unwrap();
-        let erk_png = erk_renderer::render_html(&html, WIDTH, HEIGHT).to_png();
+        let erk_png = erk_renderer::render_html(&html, WIDTH, HEIGHT)
+            .to_png()
+            .expect("non-empty frame");
         let result = compare(&decode(&erk_png), &decode(&chrome_png));
 
         std::fs::write(out.join(format!("{name}.erk.png")), &erk_png).unwrap();
@@ -323,13 +325,15 @@ fn find_chrome() -> PathBuf {
 /// resource instead, which does not start Chrome.
 fn chrome_version(chrome: &Path) -> String {
     let output = if cfg!(windows) {
+        // `-Command` does not pass trailing arguments to `$args`, so the path
+        // goes into the script as a single-quoted literal ('' escapes ').
+        let literal = chrome.to_string_lossy().replace('\'', "''");
         Command::new("powershell")
             .args([
                 "-NoProfile",
                 "-Command",
-                "(Get-Item -LiteralPath $args[0]).VersionInfo.ProductVersion",
+                &format!("(Get-Item -LiteralPath '{literal}').VersionInfo.ProductVersion"),
             ])
-            .arg(chrome)
             .output()
     } else {
         Command::new(chrome).arg("--version").output()

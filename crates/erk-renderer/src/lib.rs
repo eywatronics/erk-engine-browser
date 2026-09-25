@@ -39,12 +39,18 @@ impl Frame {
         self.pixmap.data_as_u8_slice()
     }
 
-    /// The frame encoded as PNG.
-    pub fn to_png(&self) -> Vec<u8> {
-        self.pixmap
-            .clone()
-            .into_png()
-            .expect("encoding an in-memory pixmap cannot fail")
+    /// The frame encoded as PNG, or `None` for a frame with no pixels (a
+    /// minimised window reports 0 × 0; PNG cannot encode that).
+    pub fn to_png(&self) -> Option<Vec<u8>> {
+        if self.width() == 0 || self.height() == 0 {
+            return None;
+        }
+        Some(
+            self.pixmap
+                .clone()
+                .into_png()
+                .expect("a non-empty in-memory pixmap encodes"),
+        )
     }
 
     /// The display list the frame was painted from, as text.

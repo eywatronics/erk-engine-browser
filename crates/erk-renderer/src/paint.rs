@@ -9,20 +9,25 @@ use crate::display::{DisplayItem, DisplayList};
 
 /// Paint `list` into a new `width` × `height` pixmap.
 ///
-/// Rendering uses vello_cpu's baseline SIMD level, not the one detected for
-/// this CPU: different levels may round differently, and golden images must
-/// come out identical on every machine CI runs on. Speed is the GPU path's
-/// job (M2).
+/// Rendering uses vello_cpu's scalar fallback, not a SIMD level: levels may
+/// round differently, and golden images must come out identical on every
+/// machine CI runs on. `Level::baseline()` is not enough, because it is
+/// scalar on x86_64 but NEON on aarch64. Speed is the GPU path's job (M2).
 pub(crate) fn paint(list: &DisplayList, width: u16, height: u16) -> Pixmap {
     let settings = RenderSettings {
-        level: Level::baseline(),
+        level: Level::fallback(),
         num_threads: 0,
     };
     let mut ctx = RenderContext::new_with(width, height, settings);
     let mut resources = Resources::new();
 
+    // The canvas colour is laid over white, as browsers do: a translucent
+    // root background must not make the frame itself translucent.
+    let page = Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
+    ctx.set_paint(color([255, 255, 255, 255]));
+    ctx.fill_rect(&page);
     ctx.set_paint(color(list.canvas));
-    ctx.fill_rect(&Rect::new(0.0, 0.0, f64::from(width), f64::from(height)));
+    ctx.fill_rect(&page);
 
     for item in &list.items {
         match item {

@@ -5,5 +5,7 @@
 #   name score  # lowered: reason
 # Rules: the project rules file, section "Referans testi".
 blocks 100.00
+canvas-alpha 97.81
 merhaba 91.26
+paint-order 98.61
 paragraphs 48.27  # lowered: metric tightened (tolerance 24 to 12), not a rendering change

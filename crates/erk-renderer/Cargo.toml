@@ -26,6 +26,10 @@ stylo_taffy = { version = "=0.3.0-beta.2", default-features = false, features = 
 # `calc` is required by stylo_taffy, which hands calc() values to Taffy as
 # pointers. Erk never dereferences them; see layout/calc.rs.
 taffy = { version = "=0.14.0", default-features = false, features = ["std", "block_layout", "flexbox", "grid", "float_layout", "calc", "content_size"] }
+# Only for `force_support_fallback`, which provides the scalar
+# `Level::fallback()` that paint.rs pins rendering to. Same version as
+# vello_cpu uses.
+fearless_simd = { version = "=0.4.1", features = ["force_support_fallback"] }
 # CPU rasterizer: the reference renderer and the source of golden images.
 # Single-threaded (no `multithreading` feature) so output is deterministic.
 vello_cpu = "=0.2.0"

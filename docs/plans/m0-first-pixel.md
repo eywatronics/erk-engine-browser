@@ -839,3 +839,36 @@ Mutasyonlarla doğrulandı: `blocks`'ta 1px geniş kutu %99.97 ile kırıldı;
 `merhaba`'da beyaz kutu kaldırılınca %10.37 ile kırıldı; `paragraphs.htm`
 doğrudan hata verdi; muhafız betiği yorumsuz düşürmeyi ve Chrome görüntüsü
 dururken beklenti silmeyi reddetti, gerekçeli düşürmeyi kabul etti.
+
+### Task 6 — boyama incelemesi sonrası düzeltmeler (2026-09-25)
+
+Bağımsız bir inceleyici display list ve boyama kodunu okudu, her bulguyu
+Chrome 153 ekran görüntüsüyle karşılaştırarak doğruladı. Koordinat
+birikimi, içerik kutusu kayması, Parley glif konumları, metin rengi,
+premultiplied alfa ve altın testin karşılaştırması doğru bulundu.
+
+| Bulgu | Düzeltme |
+|---|---|
+| Metin kendi arka planından hemen sonra boyanıyordu; taşan metni sonraki kardeşin arka planı örtüyordu (Chrome'da metin üstte) | CSS 2 Ek E: önce tüm arka planlar, sonra tüm metin. |
+| Yarı saydam tuval rengi saydam bir kare veriyordu (Chrome: beyazın üstüne harmanlanmış, opak) | Önce beyaz, sonra tuval rengi. |
+| `display: none` kök ya da body tuvale arka plan rengi yayıyordu (Chrome: beyaz) | Yalnızca kutu üreten elemanlar yayar. |
+| Sıfır boyutlu karede `to_png()` panikliyordu (küçültülmüş pencere 0×0 bildirir) | `to_png()` artık `Option`; boş karede `None`. |
+| `visibility: hidden` yok sayılıyordu | Arka plan da metin de boyanmıyor; alt ağaç gezilmeye devam ediyor. |
+| Not: `Level::baseline()` aarch64'te NEON | `Level::fallback()` (skaler), `fearless_simd`'nin `force_support_fallback` özelliğiyle. Bu makinede çıktı aynı. |
+| Not: `ERK_BLESS=0` da altın görüntüyü yeniden yazıyordu | Yalnızca `ERK_BLESS=1`. |
+| Not: Taffy konumları ebeveyne göre yuvarlıyor, kesirli iç içe kaymalarda toplam 1px sapabilir | M1'in akış layout'u kararına veri; şimdilik değişiklik yok. |
+
+Yeni testler (`tests/paint.rs`, 5): metnin tüm arka planlardan sonra
+boyanması, yarı saydam tuvalin beyaz üstüne harmanlanması, kutusuz
+elemanın tuvali boyamaması, `visibility: hidden`, boş karenin PNG'si
+olmaması. Üç mutasyon (metni öne almak, beyaz tabanı kaldırmak, kutu
+kontrolünü kaldırmak) ilgili testleri kırdı.
+
+Yeni referans sayfaları (kural gereği, yeni render davranışı kendi sayfasıyla):
+`paint-order` %98.61, `canvas-alpha` %97.81. Yakalama yalnızca bu iki eksik
+sayfayı çekti, mevcut referanslara dokunmadı. Yakalama sırasında
+`powershell -Command`'in ek argümanları `$args`'a koymadığı ortaya çıktı;
+sürüm okunamayınca komut "unknown" yazmak yerine durdu (yeni güvenlik
+kontrolü), yol betiğe tırnaklı değişmez olarak gömüldü.
+
+Mevcut sayfaların skorları ve altın görüntü değişmedi.

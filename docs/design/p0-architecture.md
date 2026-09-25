@@ -271,6 +271,12 @@ hangi testlerin neden kaldığına bakılarak verilir.
 
 ### 6.3 Boyama ve display list
 
+Boyama sırası CSS 2 Ek E'ye uyar: tek yığın bağlamında önce tüm blok arka
+planları (ağaç sırasıyla), sonra tüm metin. Tuval rengi beyaz bir tabanın
+üstüne harmanlanır, kare her zaman opaktır; kutu üretmeyen (`display: none`)
+kök ya da body tuvale renk yaymaz. `visibility: hidden` kutuyu tutar ama
+boyamaz.
+
 Display list Erk'indir ve webrender_api'nin çizgisindedir, Blitz'in her karede
 DOM'u yeniden gezen yaklaşımında değil: düz, serileştirilebilir öğeler
 (dikdörtgen, kenarlık, gölge, glyph run, görüntü, gradyan), bunların işaret

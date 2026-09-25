@@ -280,6 +280,7 @@ version = "0.1.0"
 dependencies = [
  "erk-dom",
  "erk-style",
+ "fearless_simd",
  "parley",
  "png",
  "skrifa",

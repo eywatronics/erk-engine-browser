@@ -29,6 +29,9 @@ yazıldığında doldurulur.
 | Render çıktısı değişmez | Altın PNG testi (`cargo test`), çözülmüş piksellerle | Glif hinting'ini kapatmak | M0 T6 | 2026-09-25, yakaladı |
 | Chrome'a yakınlık gerilemez | `tests/chrome_reference.rs`: sayfa başına içerik skoru `expectations.txt`'teki değere iki ondalıkta eşit olmalı, iki yönde de kırılır | UA'da body margin 8px → 10px; `blocks`'ta bir kutu 1px geniş (%99.97); `merhaba`'da beyaz kutu kaldırılınca (%10.37); sayfa `.htm` uzantısıyla | M0 T6b | 2026-09-25, yakaladı |
 | Beklenti gerekçesiz düşmez | CI `guards`: `.github/scripts/check-reference-expectations.sh`, PR tabanıyla karşılaştırır; düşen satırda `# lowered:` yoksa ya da Chrome görüntüsü dururken beklenti silinmişse hata | Yorumsuz düşürme; beklenti satırını silme | M0 T6b | 2026-09-25, yakaladı |
+| Boyama sırası: tüm arka planlar, sonra metin | `tests/paint.rs` + `paint-order` referans sayfası | Metni arka planlardan önce koymak | M0 T6 | 2026-09-25, yakaladı |
+| Tuval beyaz üstüne harmanlanır, kare opak | `tests/paint.rs` + `canvas-alpha` referans sayfası | Beyaz tabanı kaldırmak | M0 T6 | 2026-09-25, yakaladı |
+| Kutusuz kök/body tuvale renk yaymaz | `tests/paint.rs` | Kutu kontrolünü kaldırmak | M0 T6 | 2026-09-25, yakaladı |
 | Lisans izin listesi | `cargo deny check licenses` | GPL lisanslı bir geliştirme bağımlılığı | M1 | — |
 | WPT gerilemesi yok | wptrunner "erk" ürünü + beklenti dosyaları; taban çizgisinin altı PR'ı kırar | Geçen bir reftest'i bozan değişiklik | M1 | — |
 | Renderer ağa bağımlı değil | CI: `cargo tree -p erk-renderer` çıktısında `erk-network`, `reqwest`, `hyper`, `tokio` yok | `erk-renderer`'a `reqwest` eklemek | M2 | — |
@@ -67,8 +70,11 @@ değiştiren değişiklikle **aynı commit'te** güncellenir ve gövde neden
 değiştiğini söyler; ayrı commit, değişikliği yapan commit'i kırmızı bırakırdı.
 
 Belirleyicilik için: sabit boyut (800×600), 1x DPI, depoda gömülü yazı tipi
-(sistem yazı tipi yüklenmez), `vello_cpu` tek iş parçacığında **ve SIMD seviyesi
-`Level::baseline()`'a sabit** (seviyeler farklı yuvarlayabiliyor).
+(sistem yazı tipi yüklenmez), `vello_cpu` tek iş parçacığında **ve SIMD'siz
+skaler yolda (`Level::fallback()`)**. `Level::baseline()` yetmiyor: x86_64'te
+skaler, aarch64'te NEON. Kalan bir risk: skaler yol da platform `libm`'ine
+giden işlevler kullanıyorsa mimariler arasında ufak farklar olabilir; macOS
+arm64 CI'a girdiğinde (M2) altın görüntüler orada ayrıca doğrulanır.
 
 ### 3.2 Chrome referans testi (M0 T6b'den itibaren)
 

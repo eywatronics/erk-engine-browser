@@ -3,10 +3,16 @@
 //! Items are flat and own their data, so a list can later cross a process
 //! boundary to a compositor. M0 has backgrounds and glyph runs; borders,
 //! images, clips and the spatial tree come with the features that need them.
+//!
+//! Paint order follows CSS 2 Appendix E for a single stacking context: every
+//! block background first, in tree order, then all text. Painting a
+//! paragraph's text right after its own background would let a later
+//! sibling's background cover text that overflows into it.
 
 use std::fmt::Write as _;
 
 use erk_dom::{Document, NodeId, local_name};
+use erk_style::style::computed_values::visibility::T as Visibility;
 use erk_style::{ComputedValues, Styles};
 use parley::{FontData, PositionedLayoutItem};
 
@@ -48,24 +54,48 @@ pub(crate) struct PositionedGlyph {
 
 const WHITE: Rgba = [255, 255, 255, 255];
 
+/// What stays the same for every box during one display-list build.
+struct Walk<'a> {
+    doc: &'a Document,
+    styles: &'a Styles,
+    layouts: &'a Layouts,
+    /// The element whose background became the canvas colour.
+    canvas_source: Option<NodeId>,
+}
+
 impl DisplayList {
     pub(crate) fn build(doc: &Document, styles: &Styles, layouts: &Layouts) -> Self {
         let mut list = Self {
             canvas: WHITE,
             items: Vec::new(),
         };
-        let canvas_source = list.propagate_canvas_background(doc, styles);
-        list.add_box(doc, styles, layouts, doc.root(), (0.0, 0.0), canvas_source);
+        let walk = Walk {
+            doc,
+            styles,
+            layouts,
+            canvas_source: list.propagate_canvas_background(doc, styles, layouts),
+        };
+        let mut text = Vec::new();
+        list.add_box(&walk, doc.root(), (0.0, 0.0), &mut text);
+        list.items.append(&mut text);
         list
     }
 
     /// The root element's background paints the whole canvas; if it has
-    /// none, the body's does (CSS 2 §14.2). Returns the element whose
-    /// background was used, so it is not painted a second time.
-    fn propagate_canvas_background(&mut self, doc: &Document, styles: &Styles) -> Option<NodeId> {
+    /// none, the body's does (CSS 2 §14.2). Only elements that generate a
+    /// box take part: a `display: none` root or body propagates nothing.
+    /// Returns the element whose background was used, so it is not painted a
+    /// second time.
+    fn propagate_canvas_background(
+        &mut self,
+        doc: &Document,
+        styles: &Styles,
+        layouts: &Layouts,
+    ) -> Option<NodeId> {
         let html = child_element(doc, doc.root(), &local_name!("html"))?;
         let body = child_element(doc, html, &local_name!("body"));
         for id in std::iter::once(html).chain(body) {
+            layouts.get(id)?;
             let style = styles.computed(id)?;
             let color = background(&style);
             if color[3] != 0 {
@@ -76,25 +106,32 @@ impl DisplayList {
         None
     }
 
+    /// Add `id`'s background to the list and its text to `text`, which is
+    /// appended after every background once the walk is done.
     fn add_box(
         &mut self,
-        doc: &Document,
-        styles: &Styles,
-        layouts: &Layouts,
+        walk: &Walk<'_>,
         id: NodeId,
         parent_origin: (f32, f32),
-        canvas_source: Option<NodeId>,
+        text: &mut Vec<DisplayItem>,
     ) {
-        let Some(layout) = layouts.get(id) else {
+        let Some(layout) = walk.layouts.get(id) else {
             return;
         };
         let x = parent_origin.0 + layout.location.x;
         let y = parent_origin.1 + layout.location.y;
+        let style = walk.styles.computed(id);
+        // `visibility: hidden` keeps the box but paints nothing of it; its
+        // descendants may still be visible, so the walk continues.
+        let visible = style
+            .as_ref()
+            .is_none_or(|style| style.clone_visibility() == Visibility::Visible);
 
-        if let Some(style) = styles.computed(id)
-            && Some(id) != canvas_source
+        if let Some(style) = &style
+            && visible
+            && Some(id) != walk.canvas_source
         {
-            let color = background(&style);
+            let color = background(style);
             if color[3] != 0 {
                 self.items.push(DisplayItem::Rect {
                     x,
@@ -106,45 +143,20 @@ impl DisplayList {
             }
         }
 
-        if let Some(shaped) = layouts.text(id) {
+        if let Some(shaped) = walk.layouts.text(id)
+            && visible
+        {
             let content_x = x + layout.border.left + layout.padding.left;
             let content_y = y + layout.border.top + layout.padding.top;
-            self.add_text(&shaped.text, &shaped.layout, (content_x, content_y));
+            text.extend(glyph_runs(
+                &shaped.text,
+                &shaped.layout,
+                (content_x, content_y),
+            ));
         }
 
-        for child in doc.children(id) {
-            self.add_box(doc, styles, layouts, child, (x, y), canvas_source);
-        }
-    }
-
-    fn add_text(
-        &mut self,
-        text: &str,
-        layout: &parley::Layout<crate::text::TextBrush>,
-        origin: (f32, f32),
-    ) {
-        for line in layout.lines() {
-            for item in line.items() {
-                let PositionedLayoutItem::GlyphRun(run) = item else {
-                    continue;
-                };
-                let glyphs = run
-                    .positioned_glyphs()
-                    .map(|glyph| PositionedGlyph {
-                        id: glyph.id,
-                        x: origin.0 + glyph.x,
-                        y: origin.1 + glyph.y,
-                    })
-                    .collect();
-                let range = run.run().text_range();
-                self.items.push(DisplayItem::Glyphs(GlyphRun {
-                    font: run.run().font().clone(),
-                    size: run.run().font_size(),
-                    color: run.style().brush.0,
-                    glyphs,
-                    text: text.get(range).unwrap_or_default().to_owned(),
-                }));
-            }
+        for child in walk.doc.children(id) {
+            self.add_box(walk, child, (x, y), text);
         }
     }
 
@@ -177,6 +189,41 @@ impl DisplayList {
         }
         out
     }
+}
+
+/// The glyph runs of a shaped paragraph whose content box starts at
+/// `origin`. Parley's positioned glyphs already include each line's offset
+/// and baseline.
+fn glyph_runs(
+    text: &str,
+    layout: &parley::Layout<crate::text::TextBrush>,
+    origin: (f32, f32),
+) -> Vec<DisplayItem> {
+    let mut runs = Vec::new();
+    for line in layout.lines() {
+        for item in line.items() {
+            let PositionedLayoutItem::GlyphRun(run) = item else {
+                continue;
+            };
+            let glyphs = run
+                .positioned_glyphs()
+                .map(|glyph| PositionedGlyph {
+                    id: glyph.id,
+                    x: origin.0 + glyph.x,
+                    y: origin.1 + glyph.y,
+                })
+                .collect();
+            let range = run.run().text_range();
+            runs.push(DisplayItem::Glyphs(GlyphRun {
+                font: run.run().font().clone(),
+                size: run.run().font_size(),
+                color: run.style().brush.0,
+                glyphs,
+                text: text.get(range).unwrap_or_default().to_owned(),
+            }));
+        }
+    }
+    runs
 }
 
 fn background(style: &ComputedValues) -> Rgba {

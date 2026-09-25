@@ -3,7 +3,7 @@
 //!
 //! A mismatch writes the actual image and display list to
 //! `target/golden-actual/`. To accept an intended change, rerun with
-//! `ERK_BLESS=1` and commit the new golden image together with the change
+//! `ERK_BLESS=1` (exactly `1`; `ERK_BLESS=0` does not bless) and commit the new golden image together with the change
 //! that caused it, saying in the message why the image changed. (Committing
 //! it separately would leave the causing commit red.)
 
@@ -28,12 +28,12 @@ fn decode(png_bytes: &[u8]) -> (u32, u32, Vec<u8>) {
 fn check_golden(name: &str, html_path: &Path) {
     let html = std::fs::read_to_string(html_path).expect("test page exists");
     let frame = erk_renderer::render_html(&html, WIDTH, HEIGHT);
-    let actual = frame.to_png();
+    let actual = frame.to_png().expect("non-empty frame");
     let golden_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/golden")
         .join(format!("{name}.png"));
 
-    if std::env::var_os("ERK_BLESS").is_some() {
+    if std::env::var("ERK_BLESS").is_ok_and(|value| value == "1") {
         std::fs::create_dir_all(golden_path.parent().unwrap()).unwrap();
         std::fs::write(&golden_path, &actual).unwrap();
         return;
