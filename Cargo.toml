@@ -5,6 +5,7 @@ members = [
     "crates/erk-renderer", # style, layout, display list, paint
     "crates/erk-network",  # network interface (from M2)
     "crates/erk-dom",      # arena DOM and HTML parsing
+    "crates/erk-style",    # Stylo adapter (the one crate that may declare unsafe fns)
 ]
 
 [workspace.package]

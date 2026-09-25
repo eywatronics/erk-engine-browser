@@ -36,7 +36,8 @@ Bu kısıtlar her görevin gereksinimlerine örtük olarak dahildir.
 - **Python 3:** Stylo'nun `build.rs`'i `properties/build.py`'yi çalıştırır.
   Önce `PYTHON3` ortam değişkenine, yoksa Windows'ta `python.exe`'ye bakar.
   LLVM gerekmez (bindgen yalnızca `gecko` özelliğinde).
-- **`unsafe` yasak:** workspace lint'i `forbid`. Bu taşta istisna yok.
+- **`unsafe` yasak:** workspace lint'i `forbid`. Tek istisna `erk-style`: Stylo'nun
+  `TElement`'i beş metodu `unsafe fn` olarak tanımlıyor (bkz. Task 3 yürütme notları).
 - **`erk-dom` yapraktır:** başka `erk-*` crate'e bağımlı olmaz. Stylo'yu da
   bilmez; stil verisi `erk-renderer`'daki yan tabloda durur (Task 3).
 - **Kabuk DOM'a dokunamaz:** `erk-shell`'in doğrudan bağımlılıkları arasında
@@ -373,7 +374,7 @@ ids and html5ever sink`.
 - Produces: `StyleEngine::new(viewport) `, `restyle(&Document)`,
   `computed(NodeId) -> Option<Arc<ComputedValues>>` (crate içi)
 
-- [ ] **Step 1: Stylo'yu tek başına derle**
+- [x] **Step 1: Stylo'yu tek başına derle**
 
 blitz-dom 0.3.0-beta.2'nin `Cargo.toml`'undan `stylo`, `stylo_traits`,
 `stylo_dom`, `selectors`, `stylo_atoms`, `stylo_taffy` ve `atomic_refcell`
@@ -382,7 +383,7 @@ sürümleri alınıp `erk-renderer`'a eklenir. `cargo build -p erk-renderer`.
 Beklenen: derleniyor. Python'un bulunduğu, süre ve `target/` boyutu Yürütme
 Notları'na yazılır. Python bulunamazsa `PYTHON3` ayarlanıp tekrar denenir.
 
-- [ ] **Step 2: Atom muhafızı**
+- [x] **Step 2: Atom muhafızı**
 
 ```yaml
 - name: html5ever and Stylo share one atom crate version
@@ -396,7 +397,7 @@ Notları'na yazılır. Python bulunamazsa `PYTHON3` ayarlanıp tekrar denenir.
 Kasıtlı ihlal: `erk-dom`'da `html5ever = "=0.40.1"`. Beklenen: ya derleme ya bu
 adım kırılır; hangisinin kırıldığı Yürütme Notları'na yazılır. Geri al.
 
-- [ ] **Step 3: Adaptörü uyarla**
+- [x] **Step 3: Adaptörü uyarla**
 
 Blitz'in `blitz-dom/src/stylo.rs`'i (`TDocument`, `TNode`, `TShadowRoot`,
 `NodeInfo`, `TElement`, `selectors::Element`, `DomTraversal`) birebir
@@ -413,7 +414,7 @@ dönülür ve sebep Yürütme Notları'na yazılır.
 `TShadowRoot` stub. UA stil sayfası Blitz'inkinden alınır (lisansı dosya
 başında belirtilir).
 
-- [ ] **Step 4: Hesaplanmış stil testleri**
+- [x] **Step 4: Hesaplanmış stil testleri**
 
 - `<style>p { color: red }</style><p>x</p>` → `p`'nin rengi kırmızı
 - `<h1>` UA stil sayfasından `display: block` ve varsayılan boyutundan büyük
@@ -421,7 +422,7 @@ başında belirtilir).
 - `<p style="margin-top: 7px">` → hesaplanmış `margin-top` 7px
 - kalıtım: `body { color: blue }` → `p` içindeki metin mavi
 
-- [ ] **Step 5: Doğrula ve commit'le**
+- [x] **Step 5: Doğrula ve commit'le**
 
 Commit: `feat(style): style the arena DOM with Stylo`. Gövde, adaptörün
 Blitz'ten uyarlandığını ve yan tablo sapmasının sebebini söyler.
@@ -644,3 +645,37 @@ Kasıtlı ihlaller:
 
 html5ever 0.39.0'ın çözdüğü atom crate'leri `web_atoms` 0.2.6 ve `string_cache`
 0.9.0; Stylo'nun beklediği hat bu.
+
+### Task 3 tamamlandı (2026-09-25)
+
+Stylo 0.20 tek başına derlendi: soğuk derleme 3 dk 18 sn, `target/` ~1 GB.
+Python 3.14 PATH'teki `python.exe` ile kendiliğinden bulundu, `PYTHON3`
+gerekmedi. LLVM istenmedi.
+
+| Plan ne diyordu | Gerçek |
+|---|---|
+| Adaptör `erk-renderer/src/style/` altında | **Ayrı crate: `erk-style`.** Stylo'nun `TElement`'i beş metodu `unsafe fn` olarak tanımlıyor (`ensure_data`, `clear_data`, `set_dirty_descendants`, `unset_dirty_descendants`, `set_handled_snapshot`). Bir deneyle doğrulandı: gövde boş olsa bile `unsafe fn` bir trait metodunu uygulamak "implementation of an `unsafe` method" hatası veriyor, `forbid` altında öğe düzeyinde `allow` ise E0453 ile reddediliyor. `forbid` altındaki bir crate Stylo'yu hiç bağlayamaz. `erk-style` `deny` seviyesinde ve izin yalnızca bu beş imzada; gövdeler yan tabloya güvenli çağrılar. `erk-renderer` `forbid`'de kalıyor. |
+| Tutamak `ErkNode { doc, side, id }` | **Stylo, `TElement` tipinin tam bir işaretçi genişliğinde olmasını şart koşuyor.** Stil paylaşım önbelleği tipi `transmute` ile siliyor ve boyutları yalnızca çalışma zamanında `assert` ediyor (`sharing/mod.rs:611`). 16 baytlık tutamakla altı testin altısı da burada düştü (9744 ≠ 9488). Tutamak artık `ErkNode(&StyledNode)`: her yan tablo kaydı kendi `NodeId`'sini ve ağaca bir referansı tutuyor. Ağaç ile kayıtlar birbirini gösteriyor; kayıtlar ağaç oluştuktan sonra bir `OnceLock` ile yerleştiriliyor, güvenli kodda. Boyut artık **derleme zamanında** doğrulanıyor (`const assert`). |
+| Yan tablo sapması (Blitz'ten), trait imzası izin vermezse Blitz modeline dönülecek | **Tuttu.** Blitz modeli, düğüme ağacını gösteren ham bir işaretçi koymayı gerektirirdi (Blitz öyle yapıyor), yani `erk-dom`'a `unsafe` sokmak. Yan tablo `erk-dom`'u hem yaprak hem `forbid` tutuyor. |
+| UA stil sayfası Blitz'ten alınacak | Blitz'inki Firefox'un `html.css`'inden türetilmiş ve **MPL-2.0**. Kopyalansaydı `erk-style`'ın lisansı "MIT OR Apache-2.0" kalamazdı. HTML Standardı'nın "Rendering" bölümünden kendi küçük stil sayfamız yazıldı (`erk-style/src/ua.css`); M1'de genişler. |
+| — | Yazı tipi ölçümleri (`ex`, `ch` birimleri için) Task 5'e kadar yazı tipi boyutunun sabit oranları. |
+| — | `Styles` yalnızca hesaplanmış değerleri dışarı taşıyor; Stylo'nun `ElementData`'sı kalıcı değil, her çağrı tam yeniden stil. Artımlı stil (M5) kalıcı bir ağaç isteyecek. |
+| — | Sunumsal öznitelikler (presentational hints) şimdilik yalnızca `bgcolor` ve `align`; Blitz çok daha fazlasını eşliyor, ilgili elemanlarla gelecek. |
+| — | Stylo 0.20'nin `TElement` metot listesi Blitz'inkiyle birebir örtüştü; eksik ya da fazla metot hatası çıkmadı. |
+
+Testler (`erk-style/tests/computed.rs`, 6 test): yazar stil sayfası, UA
+stil sayfası (`h1` blok ve 32px), `style` özniteliği, kalıtım, sınıf ve id
+seçicileri, `display: none` altındaki elemanların stillenmemesi.
+
+Kasıtlı ihlaller:
+
+- `erk-style`'da `unsafe_code = "deny"` → `"allow"`: lint devralma betiği
+  "is a lint exception but does not deny unsafe_code" ile 1. Geri alınınca 0.
+- `erk-style`'a altıncı bir `#[allow(unsafe_code)]`: yüzey betiği `allows=6`
+  ile 1. Geri alınınca `allows=5 blocks=0`, 0.
+- `erk-dom`'da `html5ever = "=0.40.1"`: `cargo tree -d` hem `web_atoms`
+  0.2.6/0.3.0 hem `string_cache` 0.9.0/0.11.0 gösterdi, muhafız 1. Derleme de
+  `has_local_name`, `has_namespace`, `local_name` üzerinde E0053 ile kırıldı;
+  muhafız sebebi daha açık söylüyor. Geri alınınca 0.
+
+`stylo_taffy` henüz eklenmedi; Task 4'te gelecek.

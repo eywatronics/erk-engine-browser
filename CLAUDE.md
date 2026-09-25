@@ -59,7 +59,8 @@ geçtiği ilgili planın "Yürütme Notları"na yazılır.
 
 | Kural | Neden | Zorlama | Devreye girdiği yer |
 |---|---|---|---|
-| `unsafe` yasak | Bellek güvenliği projenin var olma sebebi. İstisna yalnızca FFI crate'lerinde, adıyla. | `[workspace.lints.rust] unsafe_code = "forbid"`, her crate `lints.workspace = true` | M0 Task 1 |
+| `unsafe` yasak | Bellek güvenliği projenin var olma sebebi. İstisna yalnızca adıyla listelenmiş crate'lerde | `[workspace.lints.rust] unsafe_code = "forbid"`, her crate `lints.workspace = true`; istisnalar `unsafe_code = "deny"` yazmak zorunda | M0 Task 1 |
+| `erk-style`'ın `unsafe` yüzeyi tam beş imza | Stylo'nun `TElement`'i beş metodu `unsafe fn` tanımlıyor; bunları uygulamak gövde güvenli olsa bile lint ihlali. Başka hiçbir `unsafe` kod yok | CI: `erk-style`'da tam 5 `allow(unsafe_code)`, 0 `unsafe` bloğu | M0 Task 3 |
 | `erk-dom` içinde `std::rc::Rc` yok | Döngüsel ağaçta referans sayımı sızıntı üretir; DOM arena + `NodeId` ile çalışır | `crates/erk-dom/clippy.toml` → `disallowed-types`, clippy `-D warnings`; `guards` job'ı lint'in `allow` ile susturulmadığını kontrol eder | M0 Task 2 |
 | `erk-dom` projeden hiçbir şey import etmez | En alttaki katman; parser dışında her şey ona bağlanır, o hiçbir şeye | CI'da `cargo tree -p erk-dom` kontrolü | M0 Task 2 |
 | Kabuk ile renderer yalnızca mesajla konuşur | M3'te renderer ayrı sürece taşındığında değişen tek şey taşıma katmanı olsun. Paylaşılan değiştirilebilir durum (`Arc<Mutex<Dom>>`) süreç ayrımını yeniden yazıma çevirir | `erk-shell` doğrudan `erk-dom`'a bağımlı olamaz (CI'da `cargo tree --depth 1`); `erk-renderer` DOM tiplerini dışa açmaz; mesaj tipleri sahip oldukları veriyi taşır | M0 Task 7 |
@@ -82,8 +83,9 @@ zorlama yöntemi: [p0-verification.md](docs/design/p0-verification.md).
 
 ## unsafe ve C/C++ politikası
 
-- `unsafe` yalnızca adıyla listelenmiş FFI crate'lerinde bulunur. Bugün liste
-  boş. İstisna crate'i workspace lint'ini devralmaz, kendi `[lints]` tablosunda
+- `unsafe` yalnızca adıyla listelenmiş crate'lerde bulunur. Bugün liste tek
+  kalem: **`erk-style`**, FFI değil ama Stylo'nun trait imzası yüzünden; beş
+  `unsafe fn` imzası, gövdeleri güvenli. İstisna crate'i workspace lint'ini devralmaz, kendi `[lints]` tablosunda
   `unsafe_code = "deny"` yazar ve izni öğe bazında `#[allow(unsafe_code)]` ile,
   gerekçe yorumuyla verir.
 - C/C++ bağımlılığı yalnızca iki yerde kabul edilir: JS motoru (M4, mozjs

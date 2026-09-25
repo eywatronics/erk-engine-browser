@@ -35,7 +35,7 @@ tanımlanır ([roadmap.md](../plans/roadmap.md)).
 | Süreç sınırına hazırlık | Kabuk ↔ renderer yalnızca tipli mesajla (`std::sync::mpsc`), renderer ayrı iş parçacığında | M3'te değişen şey yalnızca taşıma katmanı olur. §2.2. |
 | HTML ayrıştırma | `html5ever = "=0.39.0"` | 0.40, `web_atoms` 0.3 / `string_cache` 0.11'e geçti; Stylo 0.21 hâlâ `web_atoms` 0.2 / `string_cache` 0.9 kullanıyor. Atom tipleri farklı olur ve Stylo'nun `TElement::local_name()` gibi metotları derlenmez. Blitz da 0.39'a sabitli. |
 | DOM | Kendi arena DOM'umuz (`erk-dom`), `NodeId` = u32 indeks + u32 nesil | `markup5ever_rcdom` kendi README'sinde üretim kalitesinde olmadığını söylüyor ve `Rc` tabanlı. §5. |
-| Stil | `stylo` (`servo` özelliği), M0–M1'de paralellik kapalı. M0'da uyarlanan Blitz adaptörünün derlendiği sürüm (blitz-dom 0.3.0-beta.2 → 0.20.x); 0.21'e yükseltme M0'dan sonra ayrı PR | Servo ve Firefox'un CSS motoru; crates.io'da yayımlanıyor. Adaptörü birebir alabilmek için onun sürümünde başlanır. Paralellik isteğe bağlı: `traverse_dom`'a rayon havuzu verilmezse sıralı çalışır. |
+| Stil | `erk-style` crate'inde `stylo` (`servo` özelliği), M0–M1'de paralellik kapalı. M0'da uyarlanan Blitz adaptörünün derlendiği sürüm (blitz-dom 0.3.0-beta.2 → 0.20.x); 0.21'e yükseltme M0'dan sonra ayrı PR | Servo ve Firefox'un CSS motoru; crates.io'da yayımlanıyor. Adaptörü birebir alabilmek için onun sürümünde başlanır. Paralellik isteğe bağlı: `traverse_dom`'a rayon havuzu verilmezse sıralı çalışır. |
 | Layout | Taffy 0.14 (low-level API) + kendi IFC | Taffy block, flexbox, grid, float/clear destekliyor; tablo, inline ve metin layout'u yok. §6.2. |
 | Metin | Parley 0.11 (HarfRust + ICU4X + fontique) | rustybuzz arşivlendi ve yerini HarfBuzz'ın resmî Rust portu HarfRust aldı; Parley 0.6'dan beri onu kullanıyor. |
 | Boyama | Erk'in kendi display list'i → `vello_cpu` 0.2 | Deterministik PNG, GPU kurulumu yok, reftest için ideal. GPU yolu (`vello_hybrid`, wgpu 29) M2'de. §6.3. |
@@ -131,15 +131,16 @@ Ağ yok, yerel dosya okunur.
 ## 4. Crate'ler ve bağımlılık yönü
 
 ```
-erk-shell ──► erk-renderer ──► erk-dom
-    │
+erk-shell ──► erk-renderer ──► erk-style ──► erk-dom
+    │               └──────────────────────────▲
     └──► erk-network   (M2)
 ```
 
 | Crate | Sorumluluk | Bugün |
 |---|---|---|
 | `erk-dom` | Arena DOM, `NodeId`, html5ever `TreeSink` | M0 Task 2 |
-| `erk-renderer` | Stylo, layout (Taffy + Parley), display list, boyama | M0 Task 3–6 |
+| `erk-style` | Stylo adaptörü: `TElement` ve arkadaşları, yan tablo, `StyleEngine`. Tek `unsafe` istisnası (§6.1) | M0 Task 3 |
+| `erk-renderer` | Layout (Taffy + Parley), display list, boyama | M0 Task 4–6 |
 | `erk-shell` | Pencere, olay döngüsü, renderer iş parçacığıyla mesajlaşma | M0 Task 7 |
 | `erk-network` | Ağ arayüzü; M2'de reqwest, M6'da kendi Fetch | Boş |
 | `erk-ipc` | Süreçler arası taşıma | M3 |
@@ -213,6 +214,22 @@ stub olarak kalır.
 
 Stylo her ay bir 0.x sürümü çıkarıyor ve her biri kırıcı sayılmalı. Yükseltme
 html5ever ile birlikte yapılır.
+
+Adaptör kendi crate'inde, `erk-style`'da durur, çünkü iki kısıt yürütmede
+ortaya çıktı (ayrıntı: M0 planının Task 3 yürütme notları):
+
+- **`TElement` beş metodu `unsafe fn` tanımlıyor.** Bunları uygulamak, gövde
+  güvenli olsa bile `unsafe_code` ihlali; `forbid` altında hiç yapılamaz.
+  `erk-style` `deny` seviyesinde, izin yalnızca bu beş imzada, gövdeler güvenli.
+  CI sayıyı sabit tutar.
+- **Tutamak tam bir işaretçi genişliğinde olmalı.** Stylo'nun stil paylaşım
+  önbelleği eleman tipini `transmute` ile siliyor. Tutamak `&StyledNode`'dur;
+  her kayıt kendi `NodeId`'sini ve ağaca bir referansı tutar. Boyut derleme
+  zamanında doğrulanır.
+
+Stylo'nun düğüm başına verisi `erk-dom`'da değil bu crate'in yan tablosundadır;
+Blitz'in yaptığı gibi düğüme ağaca işaret eden ham bir işaretçi koymak
+`erk-dom`'a `unsafe` sokardı.
 
 ### 6.2 Layout
 

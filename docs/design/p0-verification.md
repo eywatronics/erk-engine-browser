@@ -21,7 +21,10 @@ yazıldığında doldurulur.
 | `erk-dom`'da `Rc` yok | `crates/erk-dom/clippy.toml` → `disallowed-types`; clippy `-D warnings` | `use std::rc::Rc;` ve bir alan → clippy hatası | M0 T2 | 2026-09-25, yakaladı |
 | `Rc` yasağı susturulamaz | CI `guards`: `erk-dom` içinde `disallowed_types` geçmez (bir `allow` özniteliği lint'i kapatırdı) | `#[allow(clippy::disallowed_types)]` eklemek | M0 T2 | 2026-09-25, yakaladı |
 | `erk-dom` yapraktır | CI `guards`: `cargo tree -p erk-dom --prefix none -e normal` çıktısında başka `erk-*` yok | `erk-dom`'a `erk-network` bağımlılığı eklemek | M0 T2 | 2026-09-25, yakaladı |
-| html5ever + Stylo tek atom sürümü | CI: `cargo tree -d` çıktısında `web_atoms` veya `string_cache` iki sürümle görünürse hata | `html5ever`'ı 0.40'a çekmek | M0 T3 | — |
+| html5ever + Stylo tek atom sürümü | CI `guards`: `cargo tree -d` çıktısında `web_atoms` veya `string_cache` iki sürümle görünürse hata | `html5ever`'ı 0.40.1'e çekmek (derleme de E0053 ile kırılıyor) | M0 T3 | 2026-09-25, yakaladı |
+| Lint istisnası `unsafe`'i yine reddeder | CI `guards`: istisna listesindeki crate'ler (`erk-style`) `[lints.rust] unsafe_code = "deny"` yazmak zorunda | `erk-style`'da `deny` → `allow` | M0 T3 | 2026-09-25, yakaladı |
+| `erk-style`'ın `unsafe` yüzeyi tam beş imza | CI `guards`: `allow(unsafe_code)` sayısı 5, `unsafe {` sayısı 0 | Altıncı bir `#[allow(unsafe_code)]` | M0 T3 | 2026-09-25, yakaladı |
+| Stylo tutamağı tek işaretçi genişliğinde | `const _: () = assert!(size_of::<ErkNode>() == size_of::<usize>())` (derleme zamanı) | — (16 baytlık ilk tutamak Stylo'nun çalışma zamanı `assert`'ünde düştü; bu kontrol onu derlemeye taşıdı) | M0 T3 | — |
 | Kabuk DOM'a dokunamaz | CI: `cargo tree -p erk-shell -e normal --depth 1` çıktısında `erk-dom` yok. `--depth 1` bilerek: `erk-shell → erk-renderer → erk-dom` zinciri dolaylı olarak her zaman görünür | `erk-shell`'e `erk-dom` bağımlılığı eklemek | M0 T7 | — |
 | Render çıktısı değişmez | Altın PNG testi (`cargo test`) | Varsayılan yazı rengini değiştirmek | M0 T6 | — |
 | Lisans izin listesi | `cargo deny check licenses` | GPL lisanslı bir geliştirme bağımlılığı | M1 | — |

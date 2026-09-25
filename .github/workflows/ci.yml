@@ -52,17 +52,47 @@ jobs:
         run: rustup toolchain install
 
       # unsafe_code = "forbid" lives in [workspace.lints]; a crate that drops
-      # `[lints] workspace = true` silently opts out of it.
+      # `[lints] workspace = true` silently opts out of it. The named
+      # exceptions must still deny unsafe code.
       - name: Every crate inherits the workspace lints
         run: |
+          exceptions="erk-style"
           fail=0
           for f in crates/*/Cargo.toml; do
-            if ! grep -Pzq '\[lints\]\s*\nworkspace = true' "$f"; then
+            crate=$(basename "$(dirname "$f")")
+            if [[ " $exceptions " == *" $crate "* ]]; then
+              if ! grep -Pzq '\[lints\.rust\]\s*\nunsafe_code = "deny"' "$f"; then
+                echo "$f is a lint exception but does not deny unsafe_code"
+                fail=1
+              fi
+            elif ! grep -Pzq '\[lints\]\s*\nworkspace = true' "$f"; then
               echo "$f does not inherit [workspace.lints]"
               fail=1
             fi
           done
           exit $fail
+
+      # erk-style may only implement the five `unsafe fn`s Stylo's TElement
+      # declares, with safe bodies. Any other unsafe code shows up as a sixth
+      # allow or as an unsafe block.
+      - name: erk-style's unsafe surface is exactly the five TElement signatures
+        run: |
+          allows=$(grep -rn 'allow(unsafe_code)' crates/erk-style/src | wc -l)
+          blocks=$(grep -rnE 'unsafe \{' crates/erk-style/src | wc -l)
+          echo "allow(unsafe_code): $allows, unsafe blocks: $blocks"
+          if [ "$allows" -ne 5 ] || [ "$blocks" -ne 0 ]; then
+            echo "expected 5 allows and 0 unsafe blocks in erk-style"
+            exit 1
+          fi
+
+      # html5ever and Stylo must agree on the atom crates; two versions would
+      # give element names that never compare equal.
+      - name: html5ever and Stylo share one atom crate version
+        run: |
+          if cargo tree -d -e normal | grep -E '^(web_atoms|string_cache) '; then
+            echo "duplicate atom crates: upgrade html5ever and stylo together"
+            exit 1
+          fi
 
       # The DOM is the bottom layer: everything above may depend on it, it
       # depends on no other workspace crate.

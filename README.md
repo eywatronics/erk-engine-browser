@@ -39,7 +39,8 @@ Run instructions will be added when M0 is complete.
 ```
 crates/
   erk-shell/     window, event loop, messaging with the renderer
-  erk-renderer/  style, layout, display list, paint
+  erk-renderer/  layout, display list, paint
+  erk-style/     CSS styling with Stylo
   erk-network/   network interface (from M2)
   erk-dom/       arena DOM and HTML parsing
 docs/
