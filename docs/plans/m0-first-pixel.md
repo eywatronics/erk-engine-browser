@@ -104,7 +104,7 @@ Bu taşın muhafızları bu görevde ve korudukları şeyle gelen görevlerde (T
 - Create: `rust-toolchain.toml`
 - Modify: `Cargo.toml`, `crates/*/Cargo.toml`, `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Ortamı doğrula**
+- [x] **Step 1: Ortamı doğrula**
 
 ```bash
 rustc --version
@@ -114,7 +114,7 @@ python --version
 
 Beklenen: üçü de sürüm basar. Sürümler Yürütme Notları'na yazılır.
 
-- [ ] **Step 2: Toolchain'i sabitle**
+- [x] **Step 2: Toolchain'i sabitle**
 
 ```toml
 # rust-toolchain.toml
@@ -126,7 +126,7 @@ components = ["rustfmt", "clippy"]
 Kök `Cargo.toml`'da `[workspace.package]` altına aynı sürümle
 `rust-version = "..."` eklenir.
 
-- [ ] **Step 3: Workspace lint'leri**
+- [x] **Step 3: Workspace lint'leri**
 
 Kök `Cargo.toml`:
 
@@ -145,7 +145,7 @@ Her `crates/*/Cargo.toml`:
 workspace = true
 ```
 
-- [ ] **Step 4: Kasıtlı ihlal: `unsafe`**
+- [x] **Step 4: Kasıtlı ihlal: `unsafe`**
 
 `crates/erk-dom/src/lib.rs` içine geçici olarak:
 
@@ -156,7 +156,7 @@ pub fn violation() { unsafe {} }
 Çalıştır: `cargo build -p erk-dom`. Beklenen: `unsafe_code` forbid hatasıyla
 başarısız. Satırı sil, tekrar derle. Beklenen: başarılı.
 
-- [ ] **Step 5: CI — Windows ve lint devralma kontrolü**
+- [x] **Step 5: CI — Windows ve lint devralma kontrolü**
 
 `.github/workflows/ci.yml` içinde job'a `strategy.matrix.os: [ubuntu-latest,
 windows-latest]` eklenir. Toolchain adımı `rust-toolchain.toml`'u okur
@@ -179,7 +179,7 @@ kurar; bunun kurulu rustup sürümünde böyle olduğu doğrulanır). Yeni adım
 Kasıtlı ihlal: bir crate'ten `[lints]` bloğunu sil, aynı betiği yerelde (Git
 Bash) çalıştır. Beklenen: hata. Geri al.
 
-- [ ] **Step 6: Doğrula ve commit'le**
+- [x] **Step 6: Doğrula ve commit'le**
 
 ```bash
 cargo fmt --all -- --check
@@ -587,3 +587,31 @@ Taffy'nin margin collapsing davranışı (Task 4 Step 3) ve rustup'ın argümans
 
 *(Görevler yürütüldükçe, planın yanlış çıkan varsayımları ve doğrulanan gerçeklerle
 doldurulur.)*
+
+### Task 1 tamamlandı (2026-09-25)
+
+Doğrulanan araç sürümleri: rustup 1.29.1 (winget `Rustlang.Rustup`), rustc ve
+cargo 1.98.1, Python 3.14.4, Visual Studio Community 2022 (C++ araçları kurulu,
+ayrıca Build Tools gerekmedi).
+
+| Plan ne diyordu | Gerçek |
+|---|---|
+| `rustup toolchain install` argümansız, dosyadaki toolchain'i kurar mı? (doğrulanacak) | **Kuruyor.** rustup 1.29.1'de `rust-toolchain.toml`'daki `1.98.1`'i indirdi ve "overridden by rust-toolchain.toml" diye etkinleştirdi. CI adımı buna dayanıyor. |
+| Lint devralma kontrolü `rust-checks` job'ında bir adım | Ayrı bir `guards` job'ı (ubuntu). Statik kontroller işletim sistemine bağlı değil, iki kez koşmalarına gerek yok; sonraki `cargo tree` muhafızları da buraya eklenecek. |
+| — | **Edition 2024 ve `resolver = "3"`** eklendi (plan edition'dan söz etmiyordu). Boş crate'lerde bedeli sıfır, kod yazıldıktan sonra geçiş bir iş. Resolver 3 MSRV'ye duyarlı: `rust-version`'dan yeni sürüm isteyen bağımlılığı seçmez. |
+| — | `rust-version = "1.98"` workspace'te, her crate devralıyor. |
+
+**CI kontrol adları değişti:** matris yüzünden kontroller artık
+`rust-checks (ubuntu-latest)`, `rust-checks (windows-latest)` ve `guards`.
+Branch protection'da zorunlu check olarak bu üçü seçilmeli; eski `rust-checks`
+adı artık raporlanmayacak.
+
+Kasıtlı ihlaller:
+
+- `erk-dom`'a `unsafe {}` → `error: usage of an unsafe block`, not olarak
+  "requested on the command line with `-F unsafe-code`" (workspace lint'i
+  derleyiciye `-F` olarak geçiyor). Geri alınınca derleme yeşil.
+- `erk-network`'ten `[lints]` bloğu silindi → `guards` betiği "does not inherit
+  [workspace.lints]" ile çıkış kodu 1. Geri alınınca 0.
+
+`Cargo.lock` ilk kez işlendi (Erk bir uygulama; bkz. doğrulama §2).

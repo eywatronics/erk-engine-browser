@@ -11,14 +11,20 @@ env:
 
 jobs:
   rust-checks:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is the primary development platform; Linux is the second
+        # target. macOS joins in M2, when the window layer needs checking there.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
+      # With no argument, rustup installs the toolchain named in
+      # rust-toolchain.toml, so CI and local builds use the same compiler.
+      - name: Install Rust from rust-toolchain.toml
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
 
@@ -34,4 +40,23 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --verbose
 
-      # TODO: add Web Platform Tests (WPT) step
+  # Architecture guards. Each one arrives in the same pull request as the thing
+  # it protects; see docs/design/p0-verification.md for the schedule and the
+  # deliberate violation each was tested with.
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # unsafe_code = "forbid" lives in [workspace.lints]; a crate that drops
+      # `[lints] workspace = true` silently opts out of it.
+      - name: Every crate inherits the workspace lints
+        run: |
+          fail=0
+          for f in crates/*/Cargo.toml; do
+            if ! grep -Pzq '\[lints\]\s*\nworkspace = true' "$f"; then
+              echo "$f does not inherit [workspace.lints]"
+              fail=1
+            fi
+          done
+          exit $fail

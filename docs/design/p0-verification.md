@@ -16,8 +16,8 @@ yazıldığında doldurulur.
 
 | Kural | Zorlama | Kasıtlı ihlal | Taş | Denendi |
 |---|---|---|---|---|
-| `unsafe` yasak | `[workspace.lints.rust] unsafe_code = "forbid"`; her crate `[lints] workspace = true` | `erk-dom` içinde bir `unsafe {}` bloğu → derleme hatası | M0 T1 | — |
-| Her crate workspace lint'ini devralır | CI adımı: `lints.workspace = true` içermeyen `Cargo.toml` (istisna listesi dışında) → hata | Bir crate'ten `[lints]` bloğunu silmek | M0 T1 | — |
+| `unsafe` yasak | `[workspace.lints.rust] unsafe_code = "forbid"`; her crate `[lints] workspace = true` | `erk-dom` içinde bir `unsafe {}` bloğu → derleme hatası | M0 T1 | 2026-09-25, yakaladı |
+| Her crate workspace lint'ini devralır | CI `guards` job'ı: `lints.workspace = true` içermeyen `Cargo.toml` (istisna listesi dışında) → hata | Bir crate'ten `[lints]` bloğunu silmek | M0 T1 | 2026-09-25, yakaladı |
 | `erk-dom`'da `Rc` yok | `crates/erk-dom/clippy.toml` → `disallowed-types`; clippy `-D warnings` | `use std::rc::Rc;` ve bir alan → clippy hatası | M0 T2 | — |
 | `erk-dom` yapraktır | CI: `cargo tree -p erk-dom --prefix none -e normal` çıktısında başka `erk-*` yok | `erk-dom`'a `erk-renderer` bağımlılığı eklemek | M0 T2 | — |
 | html5ever + Stylo tek atom sürümü | CI: `cargo tree -d` çıktısında `web_atoms` veya `string_cache` iki sürümle görünürse hata | `html5ever`'ı 0.40'a çekmek | M0 T3 | — |
@@ -78,9 +78,15 @@ tek iş parçacığında.
 
 M0 Task 1'den itibaren:
 
-- `windows-latest` ve `ubuntu-latest` üzerinde: `cargo fmt --all -- --check`,
+- `rust-checks` job'ı, `windows-latest` ve `ubuntu-latest` üzerinde:
+  `cargo fmt --all -- --check`,
   `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
-  `cargo build --workspace`, `cargo test --workspace`. İkisi de zorunlu check.
+  `cargo build --workspace`, `cargo test --workspace`. Toolchain
+  `rust-toolchain.toml`'dan `rustup toolchain install` ile kurulur.
+- `guards` job'ı (ubuntu): mimari muhafızlar. İşletim sistemine bağlı olmadıkları
+  için tek platformda koşar.
+- Zorunlu check'ler: `rust-checks (ubuntu-latest)`, `rust-checks
+  (windows-latest)`, `guards`.
 - `macos-latest` M0'da yok; pencere katmanı macOS'ta ayrıca doğrulanacağı zaman
   (M2) eklenir.
 - Stylo geldiğinde (M0 Task 3) CI'da Python 3 kurulu olmalı; GitHub'ın hazır
