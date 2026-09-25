@@ -1,32 +1,50 @@
 # Erk Engine
 
-**Erk** is a safe, concurrent, and fast embeddable browser engine written in Rust.
+**Erk** is a desktop browser engine written in Rust.
 
-- Hardware-accelerated rendering with **WGPU**
-- **Multi-process** architecture with sandboxed renderers
-- Correctness driven by the **Web Platform Tests (WPT)**
-- Designed to be **embedded** in other applications
+- Built on mature Rust components: html5ever, Stylo, Taffy, Parley, Vello
+- Original work where none of them reach: inline layout, the process model and
+  sandbox, networking and security policy, and the browser shell
+- Progress measured with the [Web Platform Tests](https://web-platform-tests.org/),
+  not calendar dates
 
-> Erk is in an early stage of development and is not usable yet.
+> Erk is at the very beginning. It cannot browse the web yet.
+
+## Status
+
+The current milestone is **M0 — first pixel**: open a local HTML file in a
+single process and paint it in a window or to a PNG. Multi-process isolation
+and sandboxing come in M3, JavaScript in M4. See the
+[roadmap](docs/plans/roadmap.md) (Turkish) for every milestone and its
+acceptance criterion.
 
 ## Building
 
-Requires a recent stable [Rust toolchain](https://rustup.rs/).
+Requirements:
+
+- A recent stable [Rust toolchain](https://rustup.rs/); the exact version is
+  pinned in `rust-toolchain.toml`
+- On Windows: the MSVC Build Tools with the C++ workload
+- Python 3 (used by Stylo's build script)
 
 ```sh
 cargo build
 cargo test
-cargo run -p erk-shell
 ```
+
+Run instructions will be added when M0 is complete.
 
 ## Project layout
 
 ```
 crates/
-  erk-shell/     OS window (winit) and broker process
-  erk-renderer/  HTML/CSS rendering engine, sandboxed process
-  erk-network/   Networking and Fetch rules
-  erk-dom/       DOM tree management
+  erk-shell/     window, event loop, messaging with the renderer
+  erk-renderer/  style, layout, display list, paint
+  erk-network/   network interface (from M2)
+  erk-dom/       arena DOM and HTML parsing
+docs/
+  design/        architecture decisions (Turkish)
+  plans/         roadmap and milestone plans (Turkish)
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the design overview.

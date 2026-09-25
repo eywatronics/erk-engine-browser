@@ -1,65 +1,102 @@
 # Erk Engine Architecture
 
-> Status: early design. This document describes the target architecture; most of it is not
-> implemented yet. Update it as the design evolves.
+Erk is a desktop browser engine written in Rust. It reuses mature Rust
+components and puts its original work where none of them reach: inline layout,
+the process model and sandbox, the networking and security policy, and the
+browser shell.
 
-Erk is an embeddable browser engine written in Rust, using WGPU for hardware-accelerated
-rendering and a multi-process architecture for security and stability.
+This document has two parts: what the engine looks like **today**, and the
+**target** architecture it grows into. The reasoning behind every decision,
+including the alternatives that were rejected, is in
+[docs/design/p0-architecture.md](docs/design/p0-architecture.md) (Turkish). The
+milestone plan is in [docs/plans/roadmap.md](docs/plans/roadmap.md).
 
-## Process model
+## Today (M0: first pixel)
+
+A single process with no networking. The engine reads a local HTML file and
+paints it.
 
 ```
-┌──────────────────────────────┐
-│  Shell / Broker (erk-shell)  │  privileged: OS window, input, process lifecycle
-└──────┬───────────────┬───────┘
-       │ IPC           │ IPC
-┌──────▼───────┐ ┌─────▼────────┐
-│  Renderer    │ │  Network     │
-│ (sandboxed)  │ │  process     │
-│ erk-renderer │ │ erk-network  │
-│   erk-dom    │ └──────────────┘
-└──────────────┘
+main thread                         renderer thread
+┌────────────────────┐   messages   ┌──────────────────────────────────┐
+│ erk-shell          │ ───────────► │ erk-renderer                     │
+│ window (winit),    │ ◄─────────── │ DOM, style, layout, paint        │
+│ input, frames      │   (mpsc)     │                                  │
+└────────────────────┘              └──────────────────────────────────┘
 ```
 
-- **Shell / Broker** — the only privileged process. Owns the OS window (winit), routes
-  input, spawns and supervises the other processes, and brokers every request that needs
-  OS access.
-- **Renderer** — one or more sandboxed processes. Parses HTML/CSS, builds the DOM, runs
-  style, layout and painting, and hosts the JavaScript engine. It has no direct access to
-  the file system or network.
-- **Network** — performs HTTP requests and enforces Fetch rules (CORS, redirects, caching)
-  on behalf of renderers.
-
-A crash in a renderer must never bring down the shell.
-
-## Crates
-
-| Crate          | Responsibility                                   |
-|----------------|--------------------------------------------------|
-| `erk-shell`    | OS window (winit), broker, process management    |
-| `erk-renderer` | HTML/CSS pipeline: style, layout, paint (WGPU)   |
-| `erk-network`  | Networking and the Fetch standard                |
-| `erk-dom`      | DOM tree storage and manipulation                |
-
-## IPC
-
-Processes communicate through message passing. Messages are typed Rust structs that are
-serialized at the process boundary. Every message received by the broker from a renderer is
-treated as untrusted input and validated.
-
-## JavaScript integration
-
-The JavaScript engine is implemented in C++ and embedded in the renderer process. The DOM
-lives in Rust (`erk-dom`) and is exposed to JavaScript through a bindings layer. Keeping the
-unsafe FFI surface small and well-audited is a core design goal.
+The shell and the renderer share no mutable state. They talk only through
+typed messages that own their data. When the renderer moves into its own
+process (M3), the transport changes and nothing else does.
 
 ## Rendering pipeline
 
 ```
-HTML → Parse → DOM → Style → Layout → Paint → Composite (WGPU)
+HTML ─► html5ever ─► erk-dom ─► Stylo ─► Taffy + Parley ─► display list ─► vello_cpu ─► window / PNG
 ```
 
-## Conformance
+| Stage | Component | Notes |
+|---|---|---|
+| Parsing | `html5ever` (pinned to 0.39.0) | Upgraded together with Stylo; both must share one atom crate version |
+| DOM | `erk-dom` | Arena of nodes addressed by `NodeId` (u32 index + u32 generation); no reference counting |
+| Style | Stylo | Servo's and Firefox's CSS engine; sequential traversal for now |
+| Layout | Taffy + Erk's inline layout | Taffy handles block, flexbox, grid and floats. Inline formatting (line boxes, spans across lines, justification) is Erk's own work |
+| Text | Parley | HarfRust shaping, ICU4X segmentation, fontique font fallback |
+| Paint | Erk display list → `vello_cpu` | CPU rendering is the default and the reference for tests; a GPU path (`vello_hybrid` on wgpu) comes in M2 |
 
-Correctness is measured against the [Web Platform Tests](https://web-platform-tests.org/)
-(WPT). WPT runs will be added to CI.
+## Target architecture
+
+```
+┌──────────────────────────────┐
+│  Shell / broker (erk-shell)  │  privileged: window, input, process lifecycle
+└──────┬───────────────┬───────┘
+       │ IPC           │ IPC
+┌──────▼───────┐ ┌─────▼────────┐
+│  Renderer    │ │  Network     │  sockets, DNS, TLS, cookies, cache
+│ (sandboxed,  │ │  process     │
+│  per site)   │ │ erk-network  │
+└──────────────┘ └──────────────┘
+```
+
+- **Shell / broker**: the only privileged process. Owns the window, routes
+  input and supervises the other processes.
+- **Renderer**: one sandboxed process per site (scheme + registrable domain).
+  It has no file system or network access.
+- **Network process**: the sole owner of sockets, TLS, cookies and the HTTP
+  cache. It implements the Fetch standard and enforces CORS, CORP and ORB
+  before any bytes reach a renderer. It never trusts an origin claimed by a
+  renderer.
+
+A crash in a renderer must never take down the shell.
+
+## Crates
+
+| Crate | Responsibility | Arrives in |
+|---|---|---|
+| `erk-dom` | Arena DOM and the html5ever tree sink. Depends on no other `erk-*` crate | M0 |
+| `erk-renderer` | Style, layout, display list, paint | M0 |
+| `erk-shell` | Window, event loop, messaging with the renderer. Does not depend on `erk-dom` | M0 |
+| `erk-network` | Network interface: a temporary HTTP client in M2, Erk's own Fetch implementation in M6 | M2 |
+| `erk-ipc` | Cross-process transport | M3 |
+| `erk-sandbox` | OS sandbox APIs; the only crate allowed `unsafe` | M3 |
+| `erk-js` | JavaScript engine bindings | M4 |
+
+## JavaScript
+
+JavaScript arrives in M4, after static pages render and can be browsed. The
+engine is chosen by measurement on the same mini DOM. The candidates in order
+are Boa (pure Rust) and SpiderMonkey (via `mozjs`). V8 is not a candidate. The
+acceptance test is independent of the engine: a detached DOM subtree held only
+by its own event listener's closure must be collected.
+
+## Rules enforced in CI
+
+- `unsafe` is forbidden workspace-wide; exceptions are named FFI crates only
+  (none today).
+- `erk-dom` uses no `std::rc::Rc`.
+- `erk-dom` is a leaf; `erk-shell` does not depend on `erk-dom` directly.
+- html5ever and Stylo resolve to a single version of their atom crates.
+
+Guards are added in the same pull request as the thing they protect, never
+earlier and never later. The full schedule is in
+[docs/design/p0-verification.md](docs/design/p0-verification.md).
